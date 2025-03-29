@@ -33,20 +33,35 @@ AureaCore is a service catalog component of the broader phicd project (https://g
 
 ### PR Creation Guidelines
 - Use `gh pr create` for creating PRs
-- Due to CLI limitations with newlines, use one of these approaches:
+- For multiline PR descriptions, use one of these approaches:
   ```bash
-  # Approach 1: Using shell variables (preferred)
-  pr_description="A description with newlines\nAnd more lines here\nand here..."
-  gh pr create --title "type: descriptive title" --body "$pr_description"
+  # Approach 1: Using echo with -e flag (preferred)
+  echo -e "First line\n\nSecond line\n- List item 1\n- List item 2" | gh pr create --title "type: descriptive title" --body-file -
 
-  # Approach 2: Using temporary files
+  # Approach 2: Using a heredoc
+  gh pr create --title "type: descriptive title" --body "$(cat << EOF
+  First line
+
+  Second line
+  - List item 1
+  - List item 2
+  EOF
+  )"
+
+  # Approach 3: Using temporary files
   cat > pr-description.txt << EOL
-  Your PR description here
+  First line
+
+  Second line
+  - List item 1
+  - List item 2
   EOL
   cat pr-description.txt | gh pr create --title "type: descriptive title" -F -
   rm pr-description.txt  # cleanup needed
   ```
 - Keep PR descriptions focused and well-structured
+- Use blank lines between sections for better readability
+- Use proper Markdown formatting for lists and sections
 
 ### Code Organization
 - ADRs in docs/adr/
