@@ -1,6 +1,8 @@
 # AureaCore
 
+[![CI](https://github.com/spiralhouse/aureacore/actions/workflows/ci.yml/badge.svg)](https://github.com/spiralhouse/aureacore/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/spiralhouse/aureacore/branch/main/graph/badge.svg)](https://codecov.io/gh/spiralhouse/aureacore)
+[![License](https://img.shields.io/badge/License-Apache%202.0%20with%20Commons%20Clause-blue.svg)](LICENSE)
 
 A powerful service catalog solution that helps teams discover, organize, and manage their microservices ecosystem with mathematical precision and intuitive design.
 
