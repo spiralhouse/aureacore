@@ -39,11 +39,29 @@ jobs:
       - name: Create initial test files
         run: |
           mkdir -p src
-          echo 'fn main() { println!("Hello, world!"); }' > src/main.rs
-          echo '[package]
+          cat > src/lib.rs << 'EOF'
+          pub fn add(a: i32, b: i32) -> i32 {
+              a + b
+          }
+
+          #[cfg(test)]
+          mod tests {
+              use super::*;
+
+              #[test]
+              fn test_add() {
+                  assert_eq!(add(2, 2), 4);
+              }
+          }
+          EOF
+          cat > Cargo.toml << 'EOF'
+          [package]
           name = "aureacore"
           version = "0.1.0"
-          edition = "2021"' > Cargo.toml
+          edition = "2021"
+
+          [dependencies]
+          EOF
 
       - name: Run tests with coverage
         run: |
