@@ -18,6 +18,33 @@ AureaCore is a service catalog component of the broader phicd project (https://g
 - Shell: /bin/zsh
 - GitHub CLI: Installed and authenticated
 - Workspace: /Users/$USER/Projects/aureacore
+- Dev Container: Available and recommended for development
+
+### Development Container
+The project includes a dev container configuration that provides a consistent development environment:
+
+- Base image: rust:1.75-bookworm
+- Pre-installed tools:
+  - Rust nightly toolchain with required components
+  - Development tools (cargo-deny, grcov, cargo-audit, cargo-watch)
+  - Redis server
+  - Task runner
+  - Git and GitHub CLI
+- VS Code configuration:
+  - Recommended extensions
+  - Rust-analyzer settings
+  - Code formatting and linting
+  - Debugger support
+- Environment variables:
+  - RUST_BACKTRACE=1
+  - RUST_LOG=debug
+  - REDIS_URL=redis://localhost:6379
+
+When working with the codebase:
+1. Always use the dev container when available
+2. The container provides all necessary tools and configurations
+3. Redis server starts automatically in the container
+4. Git configuration and SSH keys are mounted from the host
 
 ### Related Repositories
 - phicd: /Users/$USER/Projects/phicd
@@ -108,6 +135,15 @@ When using Helix (hx) as the default editor, some git commands that require inte
 These workarounds help avoid situations where the AI assistant might get stuck waiting for an editor to close.
 
 ## Common Tasks
+
+### Starting Development
+```bash
+# If using VS Code with Dev Containers:
+code .  # VS Code will prompt to reopen in container
+
+# If using GitHub Codespaces:
+# Open the repository in Codespaces through GitHub
+```
 
 ### Creating a New Feature Branch
 ```bash

@@ -1,0 +1,43 @@
+{
+    "name": "AureaCore Development",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml",
+                "serayuzgur.crates",
+                "vadimcn.vscode-lldb",
+                "mutantdino.resourcemonitor",
+                "github.copilot",
+                "github.copilot-chat",
+                "eamodio.gitlens"
+            ],
+            "settings": {
+                "rust-analyzer.checkOnSave.command": "clippy",
+                "rust-analyzer.checkOnSave.allTargets": true,
+                "editor.formatOnSave": true,
+                "files.trimTrailingWhitespace": true,
+                "files.insertFinalNewline": true
+            }
+        }
+    },
+    "remoteUser": "dev",
+    "mounts": [
+        "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.ssh,target=/home/dev/.ssh,type=bind,consistency=cached"
+    ],
+    "postCreateCommand": "sudo service redis-server start",
+    "forwardPorts": [
+        6379
+    ],
+    "remoteEnv": {
+        "REDIS_URL": "redis://localhost:6379"
+    }
+}
