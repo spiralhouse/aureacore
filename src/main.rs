@@ -7,5 +7,15 @@ async fn main() {
     // Initialize logging
     tracing_subscriber::fmt::init();
 
-    info!("AureaCore service catalog starting up...");
+    info!("Starting AureaCore service catalog...");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_main() {
+        main();
+    }
 }
