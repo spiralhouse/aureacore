@@ -49,8 +49,9 @@ pub fn create_schema() -> Schema<Query, Mutation, EmptySubscription> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use async_graphql::Value;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_service_query() {

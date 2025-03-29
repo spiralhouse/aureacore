@@ -1,7 +1,8 @@
 //! Plugin system for AureaCore service catalog
 
-use aureacore_core::Service;
 use std::error::Error;
+
+use aureacore_core::Service;
 
 /// Trait for implementing service discovery plugins
 #[async_trait::async_trait]
@@ -13,8 +14,9 @@ pub trait ServiceDiscovery: Send + Sync {
 /// Example plugin implementation for testing
 #[cfg(test)]
 mod tests {
-    use super::*;
     use async_trait::async_trait;
+
+    use super::*;
 
     struct TestPlugin;
 

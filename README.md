@@ -83,7 +83,38 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ### Development Setup
 
-Coming soon
+AureaCore uses [Task](https://taskfile.dev/) to automate common development workflows. To get started:
+
+1. Install Task:
+   ```bash
+   # macOS
+   brew install go-task
+
+   # Linux
+   sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+
+   # Windows (with scoop)
+   scoop install task
+   ```
+
+2. Install development tools:
+   ```bash
+   task setup
+   ```
+
+3. Available development commands:
+   ```bash
+   task                 # Show all available tasks
+   task format         # Check code formatting
+   task format-fix     # Fix code formatting
+   task lint           # Run clippy lints
+   task test          # Run tests
+   task coverage      # Generate code coverage report
+   task audit         # Run security audit
+   task check-all     # Run all checks
+   ```
+
+For more details on each command, run `task --list`
 
 ### Commit Guidelines
 
