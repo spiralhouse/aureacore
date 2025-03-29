@@ -85,7 +85,33 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ### Development Setup
 
-AureaCore uses [Task](https://taskfile.dev/) to automate common development workflows. To get started:
+AureaCore supports two development workflows:
+
+#### Option 1: Dev Container (Recommended)
+
+The easiest way to get started is using [Dev Containers](https://containers.dev/). This approach provides a consistent, pre-configured development environment with all required tools and dependencies.
+
+Requirements:
+- [Docker](https://www.docker.com/get-started)
+- [VS Code](https://code.visualstudio.com/) with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+
+To start developing:
+1. Clone the repository
+2. Open in VS Code
+3. When prompted "Reopen in Container", click "Yes"
+   - Or press `F1`, type "Dev Containers: Reopen in Container"
+
+The container includes:
+- Rust nightly toolchain with required components
+- All development tools (cargo-deny, grcov, etc.)
+- Redis server
+- Task runner
+- Recommended VS Code extensions
+- Git and GitHub CLI configuration
+
+#### Option 2: Local Setup
+
+If you prefer a local setup, you'll need to install the required tools manually:
 
 1. Install Task:
    ```bash
