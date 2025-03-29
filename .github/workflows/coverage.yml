@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_TERM_COLOR: always
+      LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
     steps:
       - uses: actions/checkout@v4
 
@@ -67,7 +68,7 @@ jobs:
       - name: Run tests with coverage
         run: |
           cargo clean
-          CARGO_INCREMENTAL=0 RUSTFLAGS='-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests' RUSTDOCFLAGS='-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests' cargo test --verbose
+          CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' cargo test --verbose
 
       - name: Generate coverage report
         run: |
