@@ -17,10 +17,7 @@ impl Query {
     /// List all services
     async fn services(&self) -> Vec<Service> {
         // This is just a placeholder implementation
-        vec![
-            Service::new("example-service", "1.0.0")
-                .with_description("An example service"),
-        ]
+        vec![Service::new("example-service", "1.0.0").with_description("An example service")]
     }
 }
 
@@ -47,8 +44,7 @@ impl Mutation {
 
 /// Create the GraphQL schema
 pub fn create_schema() -> Schema<Query, Mutation, EmptySubscription> {
-    Schema::build(Query, Mutation, EmptySubscription)
-        .finish()
+    Schema::build(Query, Mutation, EmptySubscription).finish()
 }
 
 #[cfg(test)]
@@ -71,4 +67,4 @@ mod tests {
         let res = schema.execute(query).await;
         assert_eq!(res.data.to_string(), "{service: {name: \"test\", version: \"0.1.0\"}}");
     }
-} 
+}

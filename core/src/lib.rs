@@ -16,11 +16,7 @@ pub struct Service {
 impl Service {
     /// Create a new service definition
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            description: None,
-            version: version.into(),
-        }
+        Self { name: name.into(), description: None, version: version.into() }
     }
 
     /// Add a description to the service
@@ -37,11 +33,10 @@ mod tests {
 
     #[test]
     fn test_service_creation() {
-        let service = Service::new("test-service", "1.0.0")
-            .with_description("A test service");
+        let service = Service::new("test-service", "1.0.0").with_description("A test service");
 
         assert_eq!(service.name, "test-service");
         assert_eq!(service.version, "1.0.0");
         assert_eq!(service.description, Some("A test service".to_string()));
     }
-} 
+}

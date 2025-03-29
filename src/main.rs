@@ -8,4 +8,4 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     info!("AureaCore service catalog starting up...");
-} 
+}

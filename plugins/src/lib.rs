@@ -1,7 +1,7 @@
 //! Plugin system for AureaCore service catalog
 
-use std::error::Error;
 use aureacore_core::Service;
+use std::error::Error;
 
 /// Trait for implementing service discovery plugins
 #[async_trait::async_trait]
@@ -21,10 +21,7 @@ mod tests {
     #[async_trait]
     impl ServiceDiscovery for TestPlugin {
         async fn discover(&self) -> Result<Vec<Service>, Box<dyn Error>> {
-            Ok(vec![
-                Service::new("test-service", "1.0.0")
-                    .with_description("A test service"),
-            ])
+            Ok(vec![Service::new("test-service", "1.0.0").with_description("A test service")])
         }
     }
 
@@ -35,4 +32,4 @@ mod tests {
         assert_eq!(services.len(), 1);
         assert_eq!(services[0].name, "test-service");
     }
-} 
+}
