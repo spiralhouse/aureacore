@@ -33,28 +33,14 @@ AureaCore is a service catalog component of the broader phicd project (https://g
 
 ### PR Creation Guidelines
 - Use `gh pr create` for creating PRs
-- For multiline PR descriptions, use one of these approaches:
+- For PR descriptions with line breaks, use one of these approaches:
   ```bash
-  # Approach 1: Using echo with -e flag (preferred)
-  echo -e "First line\n\nSecond line\n- List item 1\n- List item 2" | gh pr create --title "type: descriptive title" --body-file -
+  # Approach 1: Using echo -e (preferred)
+  echo -e "Title\n\nDescription with proper line breaks\n- Point 1\n- Point 2" | gh pr create --title "type: descriptive title" -F -
 
-  # Approach 2: Using a heredoc
-  gh pr create --title "type: descriptive title" --body "$(cat << EOF
-  First line
-
-  Second line
-  - List item 1
-  - List item 2
-  EOF
-  )"
-
-  # Approach 3: Using temporary files
+  # Approach 2: Using temporary files
   cat > pr-description.txt << EOL
-  First line
-
-  Second line
-  - List item 1
-  - List item 2
+  Your PR description here
   EOL
   cat pr-description.txt | gh pr create --title "type: descriptive title" -F -
   rm pr-description.txt  # cleanup needed
@@ -103,11 +89,8 @@ git checkout -b feature/descriptive-name
 
 ### Creating a PR
 ```bash
-# Create PR with shell variable
-pr_description="Summary of changes\n\nDetailed description of changes:\n- Change 1\n- Change 2\n\nAdditional context or notes"
-
-# Create PR using GitHub CLI
-gh pr create --title "type: descriptive title" --body "$pr_description"
+# Create PR with echo -e (preferred method)
+echo -e "Summary of changes\n\nDetailed description of changes:\n- Change 1\n- Change 2\n\nAdditional context or notes" | gh pr create --title "type: descriptive title" -F -
 ```
 
 ### Commit Messages
