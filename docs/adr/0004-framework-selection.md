@@ -79,8 +79,8 @@ tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["full"] }
 
 # Redis
-redis = { version = "0.24", features = ["tokio-comp", "cluster"] }
-bb8-redis = "0.14"
+redis = { version = "0.29", features = ["tokio-comp", "cluster"] }
+bb8-redis = "0.21"
 
 # Async Runtime
 tokio = { version = "1.36", features = ["full"] }
