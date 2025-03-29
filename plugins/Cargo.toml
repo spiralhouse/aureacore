@@ -1,0 +1,24 @@
+[package]
+name = "aureacore-plugins"
+version = "0.1.0"
+edition = "2021"
+description = "Plugin system for AureaCore service catalog"
+authors = ["SpiralHouse"]
+license = "Apache-2.0 WITH Commons-Clause"
+
+[dependencies]
+aureacore-core = { path = "../core" }
+
+# Async Runtime
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Utilities
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+pretty_assertions = { workspace = true } 

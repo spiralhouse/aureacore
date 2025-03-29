@@ -1,0 +1,28 @@
+[package]
+name = "aureacore-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core functionality for AureaCore service catalog"
+authors = ["SpiralHouse"]
+license = "Apache-2.0 WITH Commons-Clause"
+
+[dependencies]
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Redis
+redis = { workspace = true }
+bb8-redis = { workspace = true }
+
+# Async Runtime
+tokio = { workspace = true }
+
+# Utilities
+serde_yaml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
+pretty_assertions = { workspace = true } 

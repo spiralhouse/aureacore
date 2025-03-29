@@ -1,0 +1,65 @@
+version: "3"
+
+tasks:
+  setup:
+    desc: Install required development tools
+    cmds:
+      - rustup toolchain install nightly --component llvm-tools-preview rustfmt clippy
+      - rustup override set nightly
+      - cargo install grcov
+      - cargo install cargo-deny
+      - cargo install cargo-audit
+
+  format:
+    desc: Format code using rustfmt
+    cmds:
+      - cargo fmt --all -- --check
+
+  format-fix:
+    desc: Format code and apply changes
+    cmds:
+      - cargo fmt --all
+
+  lint:
+    desc: Run clippy lints
+    cmds:
+      - cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    desc: Run tests
+    cmds:
+      - cargo test --all-features
+
+  coverage:
+    desc: Generate code coverage report
+    cmds:
+      - rm -f coverage.lcov
+      - CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE="coverage-%p-%m.profraw" cargo test --all-features
+      - grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
+      - echo "Coverage report generated at coverage.lcov"
+
+  clean:
+    desc: Clean build artifacts and coverage files
+    cmds:
+      - cargo clean
+      - rm -f coverage*.profraw
+      - rm -f coverage.lcov
+
+  deps:
+    desc: Check dependencies and licenses
+    cmds:
+      - cargo deny check
+
+  audit:
+    desc: Run security audit on dependencies
+    cmds:
+      - cargo audit
+
+  check-all:
+    desc: Run all checks (format, lint, test, coverage, deps, audit)
+    deps: [format, lint, test, coverage, deps, audit]
+
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list

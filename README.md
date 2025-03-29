@@ -1,5 +1,7 @@
 # AureaCore
 
+[![codecov](https://codecov.io/gh/spiralhouse/aureacore/branch/main/graph/badge.svg)](https://codecov.io/gh/spiralhouse/aureacore)
+
 A powerful service catalog solution that helps teams discover, organize, and manage their microservices ecosystem with mathematical precision and intuitive design.
 
 ## Overview
@@ -81,7 +83,50 @@ Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTIN
 
 ### Development Setup
 
-Coming soon
+AureaCore uses [Task](https://taskfile.dev/) to automate common development workflows. To get started:
+
+1. Install Task:
+   ```bash
+   # macOS
+   brew install go-task
+
+   # Linux
+   sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+
+   # Windows (with scoop)
+   scoop install task
+   ```
+
+2. Install development tools:
+   ```bash
+   task setup
+   ```
+
+3. Available development commands:
+   ```bash
+   task                 # Show all available tasks
+   task format         # Check code formatting
+   task format-fix     # Fix code formatting
+   task lint          # Run clippy lints
+   task test          # Run tests
+   task coverage      # Generate code coverage report
+   task deps          # Check dependencies and licenses
+   task audit         # Run security audit
+   task check-all     # Run all checks
+   ```
+
+For more details on each command, run `task --list`
+
+### Dependency Management
+
+AureaCore uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) to validate dependencies and licenses. The configuration in `deny.toml` ensures:
+
+* All dependencies use approved licenses (MIT, Apache-2.0, BSD-3-Clause, ISC, MPL-2.0, Unicode-3.0)
+* No dependencies from unknown registries or git repositories
+* Advisory database checks for security vulnerabilities
+* Multiple version warnings for duplicate dependencies
+
+Run `task deps` to check dependencies and licenses.
 
 ### Commit Guidelines
 
