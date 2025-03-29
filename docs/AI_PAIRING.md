@@ -80,6 +80,33 @@ AureaCore is a service catalog component of the broader phicd project (https://g
 - Follow project conventions
 - Consider impact on existing code
 
+### Handling Interactive Git Commands
+When using Helix (hx) as the default editor, some git commands that require interactive editing (like `git rebase --continue`) can cause issues in the Cursor environment. To work around this:
+
+1. For merge conflict resolution:
+   ```bash
+   # Instead of just git rebase --continue, use:
+   GIT_EDITOR=: git rebase --continue  # Skip editor for commit messages
+   # Or
+   git rebase --continue --no-edit     # Keep original commit messages
+   ```
+
+2. For interactive rebases:
+   ```bash
+   # Instead of git rebase -i main, use:
+   GIT_SEQUENCE_EDITOR=: git rebase -i main  # Skip editor for rebase plan
+   ```
+
+3. For commit message editing:
+   ```bash
+   # Instead of git commit (which opens editor), use:
+   git commit -m "type: message"       # Direct message
+   # Or for multiline messages:
+   git commit -m "type: message" -m "detailed description"
+   ```
+
+These workarounds help avoid situations where the AI assistant might get stuck waiting for an editor to close.
+
 ## Common Tasks
 
 ### Creating a New Feature Branch
@@ -124,4 +151,4 @@ This document should be updated when:
 - Development preferences change
 - New common tasks are identified
 - Project status changes significantly
-- New AI-relevant context is needed 
+- New AI-relevant context is needed
