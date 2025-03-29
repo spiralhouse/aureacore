@@ -1,0 +1,47 @@
+[package]
+name = "aureacore"
+version = "0.1.0"
+edition = "2021"
+description = "Service catalog and configuration management for phicd"
+authors = ["SpiralHouse"]
+license = "Apache-2.0 WITH Commons-Clause"
+
+[workspace]
+members = [
+    "core",
+    "api",
+    "plugins",
+]
+
+[workspace.dependencies]
+# Web Framework
+axum = { version = "0.7", features = ["macros"] }
+tower = { version = "0.4", features = ["full"] }
+tower-http = { version = "0.5", features = ["full"] }
+
+# GraphQL
+async-graphql = { version = "7.0", features = ["chrono", "dataloader"] }
+async-graphql-axum = "7.0"
+
+# Redis
+redis = { version = "0.29", features = ["tokio-comp", "cluster"] }
+bb8-redis = "0.21"
+
+# Async Runtime
+tokio = { version = "1.36", features = ["full"] }
+
+# Utilities
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Testing
+tokio-test = "0.4"
+pretty_assertions = "1.4"
+
+[dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true } 
