@@ -4,7 +4,7 @@
 Proposed
 
 ## Context
-Following our architectural decisions in ADR 0002 (Rust as backend) and ADR 0003 (CAP considerations), we need to select specific frameworks and libraries that will form the foundation of AureaCore. Key requirements:
+Following our architectural decisions in ADR 0001 (Initial Architecture) and ADR 0003 (CAP considerations), we need to select specific frameworks and libraries that will form the foundation of AureaCore. Key requirements:
 
 - High performance for frequent service lookups
 - Strong async support for non-blocking operations
@@ -56,6 +56,13 @@ Reasons:
   - Built-in rate limiting
   - Request tracing
 
+- `async-graphql`: GraphQL Framework
+  - Full GraphQL spec compliance
+  - Async/await support
+  - Integrates well with Axum
+  - Type-safe schema definition
+  - Built-in subscription support
+
 - `serde`: Serialization
   - Type-safe serialization
   - Automatic derive macros
@@ -78,6 +85,10 @@ axum = { version = "0.7", features = ["macros"] }
 tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["full"] }
 
+# GraphQL
+async-graphql = { version = "7.0", features = ["chrono", "dataloader"] }
+async-graphql-axum = "7.0"
+
 # Redis
 redis = { version = "0.29", features = ["tokio-comp", "cluster"] }
 bb8-redis = "0.21"
@@ -95,12 +106,32 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 ### 2. Basic Application Structure
 ```rust
+use async_graphql::{Schema, EmptySubscription};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
     routing::{get, post},
     Router,
+    extract::State,
 };
 use bb8_redis::RedisConnectionManager;
 use tower_http::trace::TraceLayer;
+
+// GraphQL schema definition
+struct Query;
+struct Mutation;
+
+#[async_graphql::Object]
+impl Query {
+    async fn services(&self) -> Vec<Service> {
+        // Implement service listing
+        vec![]
+    }
+
+    async fn service(&self, name: String) -> Option<Service> {
+        // Implement service lookup
+        None
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -111,12 +142,18 @@ async fn main() {
         .await
         .unwrap();
 
+    // GraphQL schema
+    let schema = Schema::build(Query, Mutation, EmptySubscription)
+        .data(pool.clone())
+        .finish();
+
     // Application router
     let app = Router::new()
         .route("/services", get(list_services))
         .route("/services/:name", get(get_service))
+        .route("/graphql", post(graphql_handler))
         .layer(TraceLayer::new_for_http())
-        .with_state(pool);
+        .with_state((pool, schema));
 
     // Start server
     axum::Server::bind(&"0.0.0.0:3000".parse().unwrap())
@@ -124,7 +161,14 @@ async fn main() {
         .await
         .unwrap();
 }
-```
+
+// GraphQL handler
+async fn graphql_handler(
+    State((_, schema)): State<(bb8::Pool<RedisConnectionManager>, Schema<Query, Mutation, EmptySubscription>)>,
+    req: GraphQLRequest,
+) -> GraphQLResponse {
+    schema.execute(req.into_inner()).await.into()
+}
 
 ## Consequences
 
