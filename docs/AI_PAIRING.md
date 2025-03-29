@@ -17,10 +17,10 @@ AureaCore is a service catalog component of the broader phicd project (https://g
 - Operating System: darwin 24.3.0
 - Shell: /bin/zsh
 - GitHub CLI: Installed and authenticated
-- Workspace: /Users/jburbridge/Projects/aureacore
+- Workspace: /Users/$USER/Projects/aureacore
 
 ### Related Repositories
-- phicd: /Users/jburbridge/Projects/phicd
+- phicd: /Users/$USER/Projects/phicd
 - AureaCore: Current repository
 
 ## Development Preferences
