@@ -88,16 +88,11 @@ git checkout -b feature/descriptive-name
 
 ### Creating a PR
 ```bash
-# Create PR description file
-cat > pr-description.txt << EOL
-Your PR description here
-EOL
+# Create PR with shell variable
+pr_description="Summary of changes\n\nDetailed description of changes:\n- Change 1\n- Change 2\n\nAdditional context or notes"
 
 # Create PR using GitHub CLI
-cat pr-description.txt | gh pr create --title "type: descriptive title" -F -
-
-# Clean up
-rm pr-description.txt
+gh pr create --title "type: descriptive title" --body "$pr_description"
 ```
 
 ### Commit Messages
