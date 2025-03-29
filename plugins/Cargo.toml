@@ -11,6 +11,7 @@ aureacore-core = { path = "../core" }
 
 # Async Runtime
 tokio = { workspace = true }
+async-trait = { workspace = true }
 
 # Utilities
 serde = { workspace = true }
