@@ -45,15 +45,19 @@ tasks:
       - rm -f coverage*.profraw
       - rm -f coverage.lcov
 
+  deps:
+    desc: Check dependencies and licenses
+    cmds:
+      - cargo deny check
+
   audit:
     desc: Run security audit on dependencies
     cmds:
-      - cargo deny check
       - cargo audit
 
   check-all:
-    desc: Run all checks (format, lint, test, coverage, audit)
-    deps: [format, lint, test, coverage, audit]
+    desc: Run all checks (format, lint, test, coverage, deps, audit)
+    deps: [format, lint, test, coverage, deps, audit]
 
   default:
     desc: Show available tasks

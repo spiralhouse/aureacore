@@ -107,14 +107,26 @@ AureaCore uses [Task](https://taskfile.dev/) to automate common development work
    task                 # Show all available tasks
    task format         # Check code formatting
    task format-fix     # Fix code formatting
-   task lint           # Run clippy lints
+   task lint          # Run clippy lints
    task test          # Run tests
    task coverage      # Generate code coverage report
+   task deps          # Check dependencies and licenses
    task audit         # Run security audit
    task check-all     # Run all checks
    ```
 
 For more details on each command, run `task --list`
+
+### Dependency Management
+
+AureaCore uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) to validate dependencies and licenses. The configuration in `deny.toml` ensures:
+
+* All dependencies use approved licenses (MIT, Apache-2.0, BSD-3-Clause, ISC, MPL-2.0, Unicode-3.0)
+* No dependencies from unknown registries or git repositories
+* Advisory database checks for security vulnerabilities
+* Multiple version warnings for duplicate dependencies
+
+Run `task deps` to check dependencies and licenses.
 
 ### Commit Guidelines
 
