@@ -92,6 +92,7 @@ impl GitProvider {
     }
 
     /// Commits changes to the repository
+    #[cfg_attr(test, allow(dead_code))]
     pub fn commit_changes(&self, message: &str) -> Result<()> {
         let repo = self
             .repo
