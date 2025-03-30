@@ -89,6 +89,8 @@ impl ServiceRegistry {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use git2::Repository;
 
     use super::*;
@@ -99,20 +101,34 @@ mod tests {
         let repo_path = temp_dir.path().join("test-repo");
         let work_dir = temp_dir.path().join("work-dir");
 
-        // Create a test repository
+        // Create a test repository with proper initialization
+        fs::create_dir_all(&repo_path).unwrap();
         let repo = Repository::init(&repo_path).unwrap();
-        let signature = git2::Signature::now("test", "test@example.com").unwrap();
-        let tree_id = {
-            let mut index = repo.index().unwrap();
-            index.write_tree().unwrap()
-        };
+
+        // Create and add a README file
+        let readme_path = repo_path.join("README.md");
+        fs::write(&readme_path, "# Test Repository").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("README.md")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
-        repo.commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[]).unwrap();
+        let signature = git2::Signature::now("test", "test@example.com").unwrap();
+
+        // Create initial commit on main branch
+        repo.commit(Some("refs/heads/main"), &signature, &signature, "Initial commit", &tree, &[])
+            .unwrap();
+
+        // Set HEAD to refs/heads/main
+        repo.set_head("refs/heads/main").unwrap();
 
         // Initialize ServiceRegistry with file:// URL
         let repo_url = format!("file://{}", repo_path.to_str().unwrap());
         let mut registry = ServiceRegistry::new(repo_url, "main".to_string(), work_dir).unwrap();
-        registry.init().unwrap();
+        let result = registry.init();
+        assert!(result.is_ok());
 
         // Test service registration
         let config = ServiceConfig {
@@ -122,10 +138,10 @@ mod tests {
         let service = Service::new("test-service".to_string(), config);
 
         assert!(registry
-            .register_service("test-service", &serde_json::to_string(&service.config).unwrap())
+            .register_service("test-service.json", &serde_json::to_string(&service.config).unwrap())
             .is_ok());
-        let retrieved_service = registry.get_service("test-service").unwrap();
-        assert_eq!(retrieved_service.name, "test-service");
+        let retrieved_service = registry.get_service("test-service.json").unwrap();
+        assert_eq!(retrieved_service.name, "test-service.json");
         assert_eq!(retrieved_service.config.namespace, Some("test".to_string()));
         assert_eq!(registry.list_services().unwrap().len(), 1);
     }

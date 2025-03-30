@@ -76,7 +76,7 @@ impl ConfigStore {
                 AureaCoreError::Config(format!("Failed to read directory entry: {}", e))
             })?;
             let path = entry.path();
-            if path.is_file() {
+            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
                 configs.push(path.strip_prefix(&self.config_dir).unwrap().to_path_buf());
             }
         }
