@@ -33,7 +33,7 @@
         "source=${localEnv:HOME}/.gitconfig,target=/home/dev/.gitconfig,type=bind,consistency=cached",
         "source=${localEnv:HOME}/.ssh,target=/home/dev/.ssh,type=bind,consistency=cached"
     ],
-    "postCreateCommand": "sudo service redis-server start",
+    "postCreateCommand": "sudo service redis-server start && git config core.hooksPath .hooks",
     "forwardPorts": [
         6379
     ],
