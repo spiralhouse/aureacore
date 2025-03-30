@@ -20,10 +20,11 @@ jsonschema = "0.17"
 schemars = "0.8"
 
 # Git Integration
-git2 = "0.18"
+git2 = { version = "0.18", features = ["vendored-openssl"] }
 
 # Date and Time
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { version = "0.4.35", features = ["serde"] }
+time = "0.3.34"
 
 # Async Runtime and Utils
 tokio = { version = "1.36", features = ["full"] }
@@ -61,6 +62,7 @@ jsonschema = { workspace = true }
 schemars = { workspace = true }
 git2 = { workspace = true }
 chrono = { workspace = true }
+time = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 tempfile = { workspace = true }
