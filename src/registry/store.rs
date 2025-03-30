@@ -102,7 +102,7 @@ mod tests {
     fn test_save_and_load_config() {
         let temp_dir = TempDir::new().unwrap();
         let store = ConfigStore::new(temp_dir.path()).unwrap();
-        let config_path = PathBuf::from("test/config.yaml");
+        let config_path = PathBuf::from("test/config.json");
         let content = "test: value";
 
         store.save_config(&config_path, content).unwrap();
@@ -114,7 +114,7 @@ mod tests {
     fn test_load_nonexistent_config() {
         let temp_dir = TempDir::new().unwrap();
         let store = ConfigStore::new(temp_dir.path()).unwrap();
-        let result = store.load_config("nonexistent.yaml");
+        let result = store.load_config("nonexistent.json");
         assert!(result.is_err());
     }
 
@@ -122,8 +122,8 @@ mod tests {
     fn test_list_configs() {
         let temp_dir = TempDir::new().unwrap();
         let store = ConfigStore::new(temp_dir.path()).unwrap();
-        let config1 = PathBuf::from("test1.yaml");
-        let config2 = PathBuf::from("test2.yaml");
+        let config1 = PathBuf::from("test1.json");
+        let config2 = PathBuf::from("test2.json");
 
         store.save_config(&config1, "test1").unwrap();
         store.save_config(&config2, "test2").unwrap();
