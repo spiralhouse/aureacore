@@ -7,17 +7,29 @@ authors = ["SpiralHouse"]
 license = "Apache-2.0 WITH Commons-Clause"
 
 [workspace]
-members = [
-    "core",
-    "api",
-    "plugins",
-]
+members = ["core", "api", "plugins"]
 
 [workspace.dependencies]
 # Web Framework
 axum = { version = "0.7", features = ["macros"] }
 tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["full"] }
+
+# Schema Validation
+jsonschema = "0.17"
+schemars = { version = "0.8", features = ["derive"] }
+
+# Git Integration
+git2 = { version = "0.18", features = ["vendored-openssl"] }
+
+# Date and Time
+chrono = { version = "0.4.35", features = ["serde"] }
+time = "0.3.34"
+
+# Async Runtime and Utils
+tokio = { version = "1.36", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
 
 # GraphQL
 async-graphql = { version = "7.0", features = ["chrono", "dataloader"] }
@@ -26,10 +38,6 @@ async-graphql-axum = "7.0"
 # Redis
 redis = { version = "0.29", features = ["tokio-comp", "cluster"] }
 bb8-redis = "0.21"
-
-# Async Runtime
-tokio = { version = "1.36", features = ["full"] }
-async-trait = "0.1"
 
 # Utilities
 serde = { version = "1.0", features = ["derive"] }
@@ -41,8 +49,20 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Testing
 tokio-test = "0.4"
 pretty_assertions = "1.4"
+tempfile = "3.10"
 
 [dependencies]
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true } 
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+jsonschema = { workspace = true }
+schemars = { workspace = true }
+git2 = { workspace = true }
+chrono = { workspace = true }
+time = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+tempfile = { workspace = true }

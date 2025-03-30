@@ -1,0 +1,12 @@
+{
+  "name": "aureacore",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "check": "./scripts/check.sh"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11"
+  }
+}
