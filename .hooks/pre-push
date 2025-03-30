@@ -1,0 +1,14 @@
+#!/bin/bash
+
+echo "Running pre-push hooks..."
+
+# Run cargo test
+echo "Running cargo test..."
+cargo test
+if [ $? -ne 0 ]; then
+    echo "❌ Tests failed. Please fix the failing tests before pushing."
+    exit 1
+fi
+
+echo "✅ Pre-push hooks passed!"
+exit 0 

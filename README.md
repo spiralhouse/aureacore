@@ -145,6 +145,24 @@ If you prefer a local setup, you'll need to install the required tools manually:
 
 For more details on each command, run `task --list`
 
+### Git Hooks
+
+AureaCore uses Git hooks to ensure code quality:
+
+* **pre-commit**: Runs before each commit
+  - Checks code formatting with `cargo fmt`
+  - Runs linting with `cargo clippy`
+
+* **pre-push**: Runs before each push
+  - Runs all tests with `cargo test`
+
+The hooks are automatically configured when using the dev container. For local setup:
+
+```bash
+# Configure Git to use the project's hooks
+git config core.hooksPath .hooks
+```
+
 ### Dependency Management
 
 AureaCore uses [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) to validate dependencies and licenses. The configuration in `deny.toml` ensures:
