@@ -36,13 +36,13 @@ pub struct ServiceRef {
 mod tests {
     use jsonschema::JSONSchema;
     use schemars::schema_for;
-    use serde_json::json;
+    use serde_json::{json, Value};
 
     use super::*;
 
     #[test]
     fn test_valid_root_config() {
-        let schema = schema_for!(RootConfig);
+        let schema = serde_json::to_value(&schema_for!(RootConfig)).unwrap();
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
@@ -65,12 +65,12 @@ mod tests {
         });
 
         let validation = validator.validate(&config);
-        assert!(validation.is_ok(), "Validation failed: {:?}", validation.err());
+        assert!(validation.is_ok(), "Validation failed");
     }
 
     #[test]
     fn test_invalid_root_config_missing_required() {
-        let schema = schema_for!(RootConfig);
+        let schema = serde_json::to_value(&schema_for!(RootConfig)).unwrap();
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_invalid_service_ref() {
-        let schema = schema_for!(RootConfig);
+        let schema = serde_json::to_value(&schema_for!(RootConfig)).unwrap();
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({

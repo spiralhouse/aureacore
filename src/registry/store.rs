@@ -4,173 +4,134 @@ use std::path::{Path, PathBuf};
 use crate::error::{AureaCoreError, Result};
 use crate::registry::service::ServiceConfig;
 
-/// Manages the local storage of service configurations
+/// Manages configuration file storage
 pub struct ConfigStore {
     /// Base directory for configuration files
-    base_path: PathBuf,
+    config_dir: PathBuf,
 }
 
 impl ConfigStore {
-    /// Create a new ConfigStore with the given base path
-    pub fn new(base_path: impl Into<PathBuf>) -> Self {
-        Self { base_path: base_path.into() }
-    }
-
-    /// Initialize the configuration store
-    pub fn init(&self) -> Result<()> {
-        if !self.base_path.exists() {
-            fs::create_dir_all(&self.base_path).map_err(|e| {
-                AureaCoreError::ConfigStore(format!("Failed to create config directory: {}", e))
+    /// Creates a new ConfigStore instance
+    pub fn new(config_dir: impl Into<PathBuf>) -> Result<Self> {
+        let config_dir = config_dir.into();
+        if !config_dir.exists() {
+            fs::create_dir_all(&config_dir).map_err(|e| {
+                AureaCoreError::Config(format!("Failed to create config directory: {}", e))
             })?;
         }
-        Ok(())
+        Ok(Self { config_dir })
     }
 
-    /// Load a service configuration
-    pub fn load_config(&self, service_name: &str) -> Result<ServiceConfig> {
-        let config_path = self.get_config_path(service_name);
+    /// Loads a configuration file
+    pub fn load_config(&self, path: impl AsRef<Path>) -> Result<String> {
+        let path = self.config_dir.join(path);
+        if !path.exists() {
+            return Err(AureaCoreError::Config(format!(
+                "Configuration file not found: {}",
+                path.display()
+            )));
+        }
 
-        let config_str = fs::read_to_string(&config_path).map_err(|e| {
-            AureaCoreError::ConfigStore(format!(
-                "Failed to read config file for service '{}': {}",
-                service_name, e
-            ))
-        })?;
-
-        serde_yaml::from_str(&config_str).map_err(|e| {
-            AureaCoreError::ConfigStore(format!(
-                "Failed to parse config for service '{}': {}",
-                service_name, e
+        fs::read_to_string(&path).map_err(|e| {
+            AureaCoreError::Config(format!(
+                "Failed to read configuration file {}: {}",
+                path.display(),
+                e
             ))
         })
     }
 
-    /// Save a service configuration
-    pub fn save_config(&self, service_name: &str, config: &ServiceConfig) -> Result<()> {
-        let config_path = self.get_config_path(service_name);
-
-        // Ensure parent directory exists
-        if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| {
-                AureaCoreError::ConfigStore(format!(
-                    "Failed to create directory for service '{}': {}",
-                    service_name, e
-                ))
-            })?;
+    /// Saves a configuration file
+    pub fn save_config(&self, path: impl AsRef<Path>, content: &str) -> Result<()> {
+        let path = self.config_dir.join(path);
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    AureaCoreError::Config(format!(
+                        "Failed to create directory {}: {}",
+                        parent.display(),
+                        e
+                    ))
+                })?;
+            }
         }
 
-        let config_str = serde_yaml::to_string(config).map_err(|e| {
-            AureaCoreError::ConfigStore(format!(
-                "Failed to serialize config for service '{}': {}",
-                service_name, e
-            ))
-        })?;
-
-        fs::write(&config_path, config_str).map_err(|e| {
-            AureaCoreError::ConfigStore(format!(
-                "Failed to write config file for service '{}': {}",
-                service_name, e
+        fs::write(&path, content).map_err(|e| {
+            AureaCoreError::Config(format!(
+                "Failed to write configuration file {}: {}",
+                path.display(),
+                e
             ))
         })
     }
 
-    /// List all configuration files
-    pub fn list_configs(&self) -> Result<Vec<String>> {
+    /// Lists all configuration files
+    pub fn list_configs(&self) -> Result<Vec<PathBuf>> {
         let mut configs = Vec::new();
+        let dir = fs::read_dir(&self.config_dir).map_err(|e| {
+            AureaCoreError::Config(format!("Failed to read config directory: {}", e))
+        })?;
 
-        if !self.base_path.exists() {
-            return Ok(configs);
-        }
-
-        for entry in fs::read_dir(&self.base_path).map_err(|e| {
-            AureaCoreError::ConfigStore(format!("Failed to read config directory: {}", e))
-        })? {
+        for entry in dir {
             let entry = entry.map_err(|e| {
-                AureaCoreError::ConfigStore(format!("Failed to read directory entry: {}", e))
+                AureaCoreError::Config(format!("Failed to read directory entry: {}", e))
             })?;
-
-            if entry.path().extension().map_or(false, |ext| ext == "yaml" || ext == "yml") {
-                if let Some(name) = entry.path().file_stem() {
-                    if let Some(name_str) = name.to_str() {
-                        configs.push(name_str.to_string());
-                    }
-                }
+            let path = entry.path();
+            if path.is_file() {
+                configs.push(path.strip_prefix(&self.config_dir).unwrap().to_path_buf());
             }
         }
 
         Ok(configs)
     }
-
-    /// Get the full path for a service's configuration file
-    fn get_config_path(&self, service_name: &str) -> PathBuf {
-        self.base_path.join(format!("{}.yaml", service_name))
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use tempfile::TempDir;
 
     use super::*;
 
-    fn create_test_config() -> ServiceConfig {
-        ServiceConfig {
-            version: "1.0".to_string(),
-            parameters: HashMap::new(),
-            dependencies: vec![],
-        }
-    }
-
     #[test]
     fn test_config_store_initialization() {
         let temp_dir = TempDir::new().unwrap();
-        let store = ConfigStore::new(temp_dir.path());
-
-        assert!(store.init().is_ok());
-        assert!(temp_dir.path().exists());
+        let store = ConfigStore::new(temp_dir.path()).unwrap();
+        assert!(store.config_dir.exists());
     }
 
     #[test]
     fn test_save_and_load_config() {
         let temp_dir = TempDir::new().unwrap();
-        let store = ConfigStore::new(temp_dir.path());
-        store.init().unwrap();
+        let store = ConfigStore::new(temp_dir.path()).unwrap();
+        let config_path = PathBuf::from("test/config.yaml");
+        let content = "test: value";
 
-        let config = create_test_config();
-        assert!(store.save_config("test-service", &config).is_ok());
-
-        let loaded_config = store.load_config("test-service");
-        assert!(loaded_config.is_ok());
-
-        let loaded_config = loaded_config.unwrap();
-        assert_eq!(loaded_config.version, "1.0");
-    }
-
-    #[test]
-    fn test_list_configs() {
-        let temp_dir = TempDir::new().unwrap();
-        let store = ConfigStore::new(temp_dir.path());
-        store.init().unwrap();
-
-        let config = create_test_config();
-        store.save_config("service1", &config).unwrap();
-        store.save_config("service2", &config).unwrap();
-
-        let configs = store.list_configs().unwrap();
-        assert_eq!(configs.len(), 2);
-        assert!(configs.contains(&"service1".to_string()));
-        assert!(configs.contains(&"service2".to_string()));
+        store.save_config(&config_path, content).unwrap();
+        let loaded = store.load_config(&config_path).unwrap();
+        assert_eq!(loaded, content);
     }
 
     #[test]
     fn test_load_nonexistent_config() {
         let temp_dir = TempDir::new().unwrap();
-        let store = ConfigStore::new(temp_dir.path());
-        store.init().unwrap();
-
-        let result = store.load_config("nonexistent");
+        let store = ConfigStore::new(temp_dir.path()).unwrap();
+        let result = store.load_config("nonexistent.yaml");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_list_configs() {
+        let temp_dir = TempDir::new().unwrap();
+        let store = ConfigStore::new(temp_dir.path()).unwrap();
+        let config1 = PathBuf::from("test1.yaml");
+        let config2 = PathBuf::from("test2.yaml");
+
+        store.save_config(&config1, "test1").unwrap();
+        store.save_config(&config2, "test2").unwrap();
+
+        let configs = store.list_configs().unwrap();
+        assert_eq!(configs.len(), 2);
+        assert!(configs.contains(&config1));
+        assert!(configs.contains(&config2));
     }
 }

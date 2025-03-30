@@ -1,85 +1,74 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use git2::{FetchOptions, RemoteCallbacks, Repository};
+use git2::build::CheckoutBuilder;
+use git2::{BranchType, FetchOptions, RemoteCallbacks, Repository};
 
 use crate::error::{AureaCoreError, Result};
 
 /// Handles Git operations for configuration management
 pub struct GitProvider {
-    /// URL of the Git repository
-    repo_url: String,
-    /// Branch to use for configurations
-    branch: String,
-    /// Local path where the repository is cloned
-    local_path: PathBuf,
-    /// The Git repository instance
     repo: Option<Repository>,
+    repo_url: String,
+    branch: String,
+    work_dir: PathBuf,
 }
 
 impl GitProvider {
-    /// Create a new GitProvider
-    pub fn new(repo_url: String, branch: String, local_path: impl Into<PathBuf>) -> Self {
-        Self { repo_url, branch, local_path: local_path.into(), repo: None }
+    /// Creates a new Git provider instance
+    pub fn new(repo_url: String, branch: String, work_dir: PathBuf) -> Self {
+        Self { repo: None, repo_url, branch, work_dir }
     }
 
-    /// Clone or open the repository
-    pub fn clone_repo(&mut self) -> Result<PathBuf> {
-        if self.repo.is_some() {
-            return Ok(self.local_path.clone());
+    /// Clones the repository to the working directory
+    pub fn clone_repo(&mut self) -> Result<()> {
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.transfer_progress(|stats| {
+            tracing::debug!(
+                "Received {} of {} objects ({} bytes)",
+                stats.received_objects(),
+                stats.total_objects(),
+                stats.received_bytes()
+            );
+            true
+        });
+
+        let mut fetch_options = FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        let repo = Repository::clone(&self.repo_url, &self.work_dir)?;
+        {
+            let (object, reference) = repo.revparse_ext(&self.branch)?;
+
+            let mut checkout = CheckoutBuilder::new();
+            checkout.force();
+
+            if let Some(reference) = reference {
+                repo.set_head(reference.name().unwrap_or("HEAD"))?;
+            } else {
+                repo.set_head_detached(object.id())?;
+            }
+
+            repo.checkout_head(Some(&mut checkout))?;
         }
-
-        let mut callbacks = RemoteCallbacks::new();
-        callbacks.transfer_progress(|progress| {
-            tracing::debug!(
-                "Git progress: {}/{} objects",
-                progress.received_objects(),
-                progress.total_objects()
-            );
-            true
-        });
-
-        let mut fetch_options = FetchOptions::new();
-        fetch_options.remote_callbacks(callbacks);
-
-        let repo = if self.local_path.exists() {
-            Repository::open(&self.local_path).map_err(|e| {
-                AureaCoreError::GitOperation(format!("Failed to open repository: {}", e))
-            })?
-        } else {
-            Repository::clone_recurse(&self.repo_url, &self.local_path).map_err(|e| {
-                AureaCoreError::GitOperation(format!("Failed to clone repository: {}", e))
-            })?
-        };
-
-        // Checkout the specified branch
-        let obj = repo.revparse_single(&format!("origin/{}", self.branch)).map_err(|e| {
-            AureaCoreError::GitOperation(format!("Failed to find branch '{}': {}", self.branch, e))
-        })?;
-
-        repo.checkout_tree(&obj, None).map_err(|e| {
-            AureaCoreError::GitOperation(format!("Failed to checkout branch: {}", e))
-        })?;
-
         self.repo = Some(repo);
-        Ok(self.local_path.clone())
+        Ok(())
     }
 
-    /// Pull latest changes from the remote repository
-    pub fn pull_changes(&mut self) -> Result<()> {
-        let repo = self.repo.as_ref().ok_or_else(|| {
-            AureaCoreError::GitOperation("Repository not initialized".to_string())
-        })?;
+    /// Updates the repository by pulling the latest changes
+    pub fn pull(&mut self) -> Result<()> {
+        let repo = self
+            .repo
+            .as_ref()
+            .ok_or_else(|| AureaCoreError::Git("Repository not initialized".to_string()))?;
 
-        let mut remote = repo
-            .find_remote("origin")
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to find remote: {}", e)))?;
-
+        let mut remote = repo.find_remote("origin")?;
         let mut callbacks = RemoteCallbacks::new();
-        callbacks.transfer_progress(|progress| {
+        callbacks.transfer_progress(|stats| {
             tracing::debug!(
-                "Git pull progress: {}/{} objects",
-                progress.received_objects(),
-                progress.total_objects()
+                "Received {} of {} objects ({} bytes)",
+                stats.received_objects(),
+                stats.total_objects(),
+                stats.received_bytes()
             );
             true
         });
@@ -87,53 +76,36 @@ impl GitProvider {
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
 
-        remote
-            .fetch(&[&self.branch], Some(&mut fetch_options), None)
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to fetch changes: {}", e)))?;
+        remote.fetch(&[&self.branch], Some(&mut fetch_options), None)?;
+
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
+        let commit = repo.find_commit(fetch_commit.id())?;
+
+        let mut checkout = CheckoutBuilder::new();
+        checkout.force();
+
+        repo.checkout_tree(commit.as_object(), Some(&mut checkout))?;
+        repo.set_head(format!("refs/heads/{}", self.branch).as_str())?;
 
         Ok(())
     }
 
-    /// Commit and push changes
+    /// Commits changes to the repository
     pub fn commit_changes(&self, message: &str) -> Result<()> {
-        let repo = self.repo.as_ref().ok_or_else(|| {
-            AureaCoreError::GitOperation("Repository not initialized".to_string())
-        })?;
+        let repo = self
+            .repo
+            .as_ref()
+            .ok_or_else(|| AureaCoreError::Git("Repository not initialized".to_string()))?;
 
-        let mut index = repo
-            .index()
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to get index: {}", e)))?;
+        let mut index = repo.index()?;
+        let tree_id = index.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
 
-        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).map_err(|e| {
-            AureaCoreError::GitOperation(format!("Failed to add files to index: {}", e))
-        })?;
+        let signature = git2::Signature::now("AureaCore", "aureacore@example.com")?;
+        let parent = repo.head()?.peel_to_commit()?;
 
-        index
-            .write()
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to write index: {}", e)))?;
-
-        let tree_id = index
-            .write_tree()
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to write tree: {}", e)))?;
-
-        let tree = repo
-            .find_tree(tree_id)
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to find tree: {}", e)))?;
-
-        let signature = repo
-            .signature()
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to get signature: {}", e)))?;
-
-        let parent = repo
-            .head()
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to get HEAD: {}", e)))?;
-
-        let parent_commit = parent.peel_to_commit().map_err(|e| {
-            AureaCoreError::GitOperation(format!("Failed to get parent commit: {}", e))
-        })?;
-
-        repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent_commit])
-            .map_err(|e| AureaCoreError::GitOperation(format!("Failed to create commit: {}", e)))?;
+        repo.commit(Some("HEAD"), &signature, &signature, message, &tree, &[&parent])?;
 
         Ok(())
     }
@@ -141,51 +113,66 @@ impl GitProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use tempfile::TempDir;
 
     use super::*;
 
-    fn setup_test_repo() -> (TempDir, String) {
+    fn setup_test_repo() -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path().to_str().unwrap().to_string();
-
-        // Initialize a test repository
+        let repo_path = temp_dir.path().join("test-repo");
         let repo = Repository::init(&repo_path).unwrap();
-        let signature = git2::Signature::now("test", "test@example.com").unwrap();
 
         // Create an initial commit
-        let tree_id = {
-            let mut index = repo.index().unwrap();
-            index.write_tree().unwrap()
-        };
+        fs::create_dir_all(&repo_path).unwrap();
+        let readme_path = repo_path.join("README.md");
+        fs::write(&readme_path, "# Test Repository").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("README.md")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
+        let signature = git2::Signature::now("test", "test@example.com").unwrap();
+
+        // Create initial commit
         repo.commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[]).unwrap();
+
+        // Create main branch
+        let mut checkout = CheckoutBuilder::new();
+        checkout.force();
+        repo.checkout_head(Some(&mut checkout)).unwrap();
+
+        // Set HEAD to refs/heads/main
+        repo.set_head("refs/heads/main").unwrap();
 
         (temp_dir, repo_path)
     }
 
     #[test]
     fn test_git_provider_initialization() {
-        let (temp_dir, repo_path) = setup_test_repo();
-        let work_dir = TempDir::new().unwrap();
-
-        let mut provider =
-            GitProvider::new(repo_path, "main".to_string(), work_dir.path().to_path_buf());
-
+        let (_temp_dir, repo_path) = setup_test_repo();
+        let provider = GitProvider::new(
+            repo_path.to_str().unwrap().to_string(),
+            "main".to_string(),
+            repo_path.parent().unwrap().join("work-dir"),
+        );
         assert!(provider.repo.is_none());
-        assert_eq!(provider.branch, "main");
     }
 
     #[test]
     fn test_git_provider_clone_existing_repo() {
-        let (temp_dir, repo_path) = setup_test_repo();
-        let work_dir = TempDir::new().unwrap();
-
-        let mut provider =
-            GitProvider::new(repo_path, "main".to_string(), work_dir.path().to_path_buf());
-
+        let (_temp_dir, repo_path) = setup_test_repo();
+        let work_dir = repo_path.parent().unwrap().join("work-dir");
+        let mut provider = GitProvider::new(
+            repo_path.to_str().unwrap().to_string(),
+            "main".to_string(),
+            work_dir.clone(),
+        );
         let result = provider.clone_repo();
         assert!(result.is_ok());
-        assert!(provider.repo.is_some());
+        assert!(work_dir.join(".git").exists());
     }
 }
