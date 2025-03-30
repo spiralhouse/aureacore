@@ -168,16 +168,15 @@ mod tests {
         let tree = repo.find_tree(tree_id).unwrap();
         let signature = Signature::now("test", "test@example.com").unwrap();
 
-        // Create initial commit
-        repo.commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[]).unwrap();
+        // Create initial commit on the main branch
+        repo.commit(Some("refs/heads/main"), &signature, &signature, "Initial commit", &tree, &[])
+            .unwrap();
 
-        // Create main branch
+        // Set HEAD to refs/heads/main and checkout
+        repo.set_head("refs/heads/main").unwrap();
         let mut checkout = CheckoutBuilder::new();
         checkout.force();
         repo.checkout_head(Some(&mut checkout)).unwrap();
-
-        // Set HEAD to refs/heads/main
-        repo.set_head("refs/heads/main").unwrap();
 
         (temp_dir, repo_path)
     }
