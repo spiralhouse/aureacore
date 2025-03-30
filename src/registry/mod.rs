@@ -134,7 +134,7 @@ mod tests {
         let (_temp_dir, repo_path) = setup_test_repo();
         let work_dir = repo_path.parent().unwrap().join("work-dir");
         let mut registry = ServiceRegistry::new(
-            repo_path.to_str().unwrap().to_string(),
+            format!("file://{}", repo_path.to_str().unwrap()), // Use file:// protocol for local repos
             "main".to_string(),
             work_dir.clone(),
         )
