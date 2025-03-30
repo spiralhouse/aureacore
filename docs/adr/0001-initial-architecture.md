@@ -9,6 +9,90 @@ AureaCore is being developed as a service catalog component that will integrate 
 ## Decision
 We will implement AureaCore with the following core architectural components:
 
+### Component Overview
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        UI[React UI]
+        UI_DEPS[Dependency Visualizer]
+        UI_SEARCH[Search & Filtering]
+    end
+
+    subgraph "API Layer"
+        REST[REST API]
+        GQL[GraphQL API]
+        WS[WebSocket Server]
+    end
+
+    subgraph "Core Services"
+        SVC_REG[Service Registry]
+        CONF_MGR[Configuration Manager]
+        META_STORE[Metadata Store]
+        DEP_ENGINE[Dependency Engine]
+        CACHE[Redis Cache]
+    end
+
+    subgraph "Integration Layer"
+        GIT_INT[Git Integration]
+        PHICD_INT[phicd Integration]
+        K8S_INT[Kubernetes Integration]
+    end
+
+    subgraph "Storage Layer"
+        GIT[Git Repositories]
+        REDIS[(Redis)]
+    end
+
+    %% Frontend to API connections
+    UI --> |HTTP| REST
+    UI --> |GraphQL| GQL
+    UI --> |WebSocket| WS
+    UI_DEPS --> |GraphQL| GQL
+    UI_SEARCH --> |GraphQL| GQL
+
+    %% API to Core Services
+    REST --> SVC_REG
+    REST --> META_STORE
+    GQL --> SVC_REG
+    GQL --> META_STORE
+    GQL --> DEP_ENGINE
+    WS --> DEP_ENGINE
+
+    %% Core Services interactions
+    SVC_REG --> CONF_MGR
+    CONF_MGR --> META_STORE
+    META_STORE --> DEP_ENGINE
+    SVC_REG --> CACHE
+    META_STORE --> CACHE
+    DEP_ENGINE --> CACHE
+
+    %% Core to Integration Layer
+    SVC_REG --> GIT_INT
+    CONF_MGR --> GIT_INT
+    META_STORE --> PHICD_INT
+    SVC_REG --> K8S_INT
+
+    %% Integration to Storage
+    GIT_INT --> GIT
+    CACHE --> REDIS
+
+    %% Styling
+    classDef frontend fill:#d4e6f1,stroke:#2874a6,stroke-width:2px
+    classDef api fill:#d5f5e3,stroke:#196f3d,stroke-width:2px
+    classDef core fill:#fdebd0,stroke:#d35400,stroke-width:2px
+    classDef integration fill:#ebdef0,stroke:#6c3483,stroke-width:2px
+    classDef storage fill:#f2d7d5,stroke:#922b21,stroke-width:2px
+
+    class UI,UI_DEPS,UI_SEARCH frontend
+    class REST,GQL,WS api
+    class SVC_REG,CONF_MGR,META_STORE,DEP_ENGINE,CACHE core
+    class GIT_INT,PHICD_INT,K8S_INT integration
+    class GIT,REDIS storage
+```
+
+The diagram above illustrates the high-level architecture of AureaCore, showing the main components and their interactions across different layers. Each layer has specific responsibilities and communicates with adjacent layers through well-defined interfaces.
+
 ### 1. Core Components
 
 #### Service Registry
