@@ -78,11 +78,11 @@ graph TB
     CACHE --> REDIS
 
     %% Styling
-    classDef frontend fill:#d4e6f1,stroke:#2874a6,stroke-width:2px
-    classDef api fill:#d5f5e3,stroke:#196f3d,stroke-width:2px
-    classDef core fill:#fdebd0,stroke:#d35400,stroke-width:2px
-    classDef integration fill:#ebdef0,stroke:#6c3483,stroke-width:2px
-    classDef storage fill:#f2d7d5,stroke:#922b21,stroke-width:2px
+    classDef frontend fill:#d4e6f1,stroke:#2874a6,stroke-width:2px,color:#000
+    classDef api fill:#d5f5e3,stroke:#196f3d,stroke-width:2px,color:#000
+    classDef core fill:#fdebd0,stroke:#d35400,stroke-width:2px,color:#000
+    classDef integration fill:#ebdef0,stroke:#6c3483,stroke-width:2px,color:#000
+    classDef storage fill:#f2d7d5,stroke:#922b21,stroke-width:2px,color:#000
 
     class UI,UI_DEPS,UI_SEARCH frontend
     class REST,GQL,WS api
