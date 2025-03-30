@@ -47,13 +47,16 @@ mod tests {
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
+            "version": "1.0",
             "global": {
-                "namespace": "test"
+                "config_dir": "/etc/aureacore/configs",
+                "default_namespace": "default"
             },
             "services": [
                 {
                     "name": "test-service",
-                    "path": "services/test-service"
+                    "config_path": "services/test-service/config.yaml",
+                    "namespace": "test"
                 }
             ]
         });
