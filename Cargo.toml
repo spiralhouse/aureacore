@@ -7,17 +7,17 @@ authors = ["SpiralHouse"]
 license = "Apache-2.0 WITH Commons-Clause"
 
 [workspace]
-members = [
-    "core",
-    "api",
-    "plugins",
-]
+members = ["core", "api", "plugins"]
 
 [workspace.dependencies]
 # Web Framework
 axum = { version = "0.7", features = ["macros"] }
 tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["full"] }
+
+# Schema Validation
+jsonschema = "0.17"
+schemars = "0.8"
 
 # GraphQL
 async-graphql = { version = "7.0", features = ["chrono", "dataloader"] }
@@ -45,4 +45,8 @@ pretty_assertions = "1.4"
 [dependencies]
 tokio = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true } 
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+jsonschema = { workspace = true }
+schemars = { workspace = true }
