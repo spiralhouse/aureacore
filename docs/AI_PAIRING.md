@@ -81,6 +81,80 @@ When working with the codebase:
 - Documentation in docs/
 - Source code structure (coming soon)
 
+### Test-Driven Development
+AureaCore follows Test-Driven Development (TDD) practices for all new code. When implementing features:
+
+1. **Write the Test First**
+   - Start with a failing test that defines the expected behavior
+   - Consider edge cases and error conditions
+   - Use descriptive test names that explain the behavior being tested
+   ```rust
+   #[test]
+   fn test_service_schema_validates_required_fields() {
+       // Test implementation
+   }
+   ```
+
+2. **Red-Green-Refactor Cycle**
+   - Red: Write a failing test
+   - Green: Write minimal code to make the test pass
+   - Refactor: Improve the code while keeping tests green
+   - Commit after each cycle
+
+3. **Test Organization**
+   - Unit tests alongside the code they test
+   - Integration tests in `tests/` directory
+   - Use test modules with `#[cfg(test)]`
+   - Group related tests in nested modules
+
+4. **Test Coverage**
+   - Aim for high test coverage
+   - Use `cargo test` for running tests
+   - Use `cargo tarpaulin` or `grcov` for coverage reports
+   - Document any intentionally uncovered code
+
+5. **Testing Best Practices**
+   - One assertion per test when possible
+   - Use clear setup and teardown
+   - Mock external dependencies
+   - Test error cases explicitly
+   - Use test fixtures when appropriate
+
+Example test structure:
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Setup common test data
+    fn setup() -> TestStruct {
+        // Setup code
+    }
+
+    #[test]
+    fn test_happy_path() {
+        let test_data = setup();
+        // Test implementation
+    }
+
+    #[test]
+    fn test_error_condition() {
+        let test_data = setup();
+        // Test implementation
+    }
+
+    // Group related tests in nested modules
+    mod validation_tests {
+        use super::*;
+
+        #[test]
+        fn test_specific_validation() {
+            // Test implementation
+        }
+    }
+}
+```
+
 ### Documentation Standards
 - Use markdown for all documentation
 - Include links to related documents
