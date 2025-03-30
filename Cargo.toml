@@ -17,7 +17,7 @@ tower-http = { version = "0.5", features = ["full"] }
 
 # Schema Validation
 jsonschema = "0.17"
-schemars = "0.8"
+schemars = { version = "0.8", features = ["derive"] }
 
 # Git Integration
 git2 = { version = "0.18", features = ["vendored-openssl"] }

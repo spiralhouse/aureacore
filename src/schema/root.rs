@@ -43,7 +43,7 @@ mod tests {
     #[test]
     fn test_valid_root_config() {
         let schema =
-            serde_json::to_value(&schema_for!(RootConfig)).expect("Failed to compile schema");
+            serde_json::to_value(schema_for!(RootConfig)).expect("Failed to compile schema");
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
@@ -68,7 +68,7 @@ mod tests {
     #[test]
     fn test_invalid_root_config_missing_required() {
         let schema =
-            serde_json::to_value(&schema_for!(RootConfig)).expect("Failed to compile schema");
+            serde_json::to_value(schema_for!(RootConfig)).expect("Failed to compile schema");
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn test_invalid_service_ref() {
         let schema =
-            serde_json::to_value(&schema_for!(RootConfig)).expect("Failed to compile schema");
+            serde_json::to_value(schema_for!(RootConfig)).expect("Failed to compile schema");
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
