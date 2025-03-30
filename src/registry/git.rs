@@ -96,7 +96,7 @@ impl GitProvider {
     /// This method is currently only used in tests but is part of the public API
     /// as it will be used by the service registry for automated configuration updates
     /// and synchronization in future implementations.
-    #[allow(dead_code)]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn commit_changes(&self, message: &str) -> Result<()> {
         let repo = self
             .repo
