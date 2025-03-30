@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use git2::build::CheckoutBuilder;
-use git2::{BranchType, FetchOptions, RemoteCallbacks, Repository};
+use git2::{FetchOptions, RemoteCallbacks, Repository};
 
 use crate::error::{AureaCoreError, Result};
 

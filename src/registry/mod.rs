@@ -5,8 +5,6 @@ mod store;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use git2::build::CheckoutBuilder;
-use git2::Repository;
 pub use service::{Service, ServiceConfig, ServiceStatus};
 
 use crate::error::Result;
@@ -66,6 +64,8 @@ impl ServiceRegistry {
 mod tests {
     use std::fs;
 
+    use git2::build::CheckoutBuilder;
+    use git2::Repository;
     use tempfile::TempDir;
 
     use super::*;

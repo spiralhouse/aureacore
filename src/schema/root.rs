@@ -36,41 +36,36 @@ pub struct ServiceRef {
 mod tests {
     use jsonschema::JSONSchema;
     use schemars::schema_for;
-    use serde_json::{json, Value};
+    use serde_json::json;
 
     use super::*;
 
     #[test]
     fn test_valid_root_config() {
-        let schema = serde_json::to_value(&schema_for!(RootConfig)).unwrap();
+        let schema =
+            serde_json::to_value(&schema_for!(RootConfig)).expect("Failed to compile schema");
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
-            "version": "1.0",
             "global": {
-                "config_dir": "/etc/aureacore/configs",
-                "default_namespace": "default"
+                "namespace": "test"
             },
             "services": [
                 {
-                    "name": "auth-service",
-                    "config_path": "auth/config.yaml",
-                    "namespace": "auth"
-                },
-                {
-                    "name": "api-gateway",
-                    "config_path": "gateway/config.yaml"
+                    "name": "test-service",
+                    "path": "services/test-service"
                 }
             ]
         });
 
         let validation = validator.validate(&config);
-        assert!(validation.is_ok(), "Validation failed");
+        assert!(validation.is_ok());
     }
 
     #[test]
     fn test_invalid_root_config_missing_required() {
-        let schema = serde_json::to_value(&schema_for!(RootConfig)).unwrap();
+        let schema =
+            serde_json::to_value(&schema_for!(RootConfig)).expect("Failed to compile schema");
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({
@@ -85,7 +80,8 @@ mod tests {
 
     #[test]
     fn test_invalid_service_ref() {
-        let schema = serde_json::to_value(&schema_for!(RootConfig)).unwrap();
+        let schema =
+            serde_json::to_value(&schema_for!(RootConfig)).expect("Failed to compile schema");
         let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
 
         let config = json!({

@@ -2,9 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::error::{AureaCoreError, Result};
-use crate::registry::service::ServiceConfig;
 
-/// Manages configuration file storage
+/// Manages service configuration storage
 pub struct ConfigStore {
     /// Base directory for configuration files
     config_dir: PathBuf,
