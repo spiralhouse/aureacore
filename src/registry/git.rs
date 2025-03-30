@@ -44,7 +44,12 @@ impl GitProvider {
         let mut fetch_options = FetchOptions::new();
         fetch_options.remote_callbacks(callbacks);
 
-        let repo = match Repository::clone(&self.repo_url, &self.work_dir) {
+        // Clone with specific branch
+        let mut builder = git2::build::RepoBuilder::new();
+        builder.fetch_options(fetch_options);
+        builder.branch(&self.branch);
+
+        let repo = match builder.clone(&self.repo_url, &self.work_dir) {
             Ok(repo) => repo,
             Err(e) => {
                 return Err(AureaCoreError::Git(format!("Failed to clone repository: {}", e)))
@@ -54,15 +59,14 @@ impl GitProvider {
         let mut checkout = CheckoutBuilder::new();
         checkout.force();
 
-        if let Err(e) = repo.checkout_head(Some(&mut checkout)) {
-            return Err(AureaCoreError::Git(format!("Failed to checkout HEAD: {}", e)));
-        }
-
-        if let Err(e) = repo.set_head(&format!("refs/heads/{}", self.branch)) {
-            return Err(AureaCoreError::Git(format!(
-                "Failed to set HEAD to {}: {}",
-                self.branch, e
-            )));
+        // Ensure we're on the right branch
+        let branch_ref = format!("refs/heads/{}", self.branch);
+        if let Ok(reference) = repo.find_reference(&branch_ref) {
+            let commit = reference.peel_to_commit()?;
+            repo.checkout_tree(commit.as_object(), Some(&mut checkout))?;
+            repo.set_head(&branch_ref)?;
+        } else {
+            return Err(AureaCoreError::Git(format!("Branch {} not found", self.branch)));
         }
 
         self.repo = Some(repo);
