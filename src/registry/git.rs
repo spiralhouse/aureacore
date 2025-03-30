@@ -175,4 +175,36 @@ mod tests {
         assert!(result.is_ok());
         assert!(work_dir.join(".git").exists());
     }
+
+    #[test]
+    fn test_git_provider_commit_changes() {
+        let (_temp_dir, repo_path) = setup_test_repo();
+        let work_dir = repo_path.parent().unwrap().join("work-dir");
+        let mut provider = GitProvider::new(
+            repo_path.to_str().unwrap().to_string(),
+            "main".to_string(),
+            work_dir.clone(),
+        );
+
+        // Clone the repository
+        provider.clone_repo().unwrap();
+
+        // Create a new file
+        let test_file = work_dir.join("test.txt");
+        fs::write(&test_file, "test content").unwrap();
+
+        // Add and commit the file
+        let repo = provider.repo.as_ref().unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("test.txt")).unwrap();
+        index.write().unwrap();
+
+        let result = provider.commit_changes("Add test file");
+        assert!(result.is_ok());
+
+        // Verify the commit
+        let head = repo.head().unwrap();
+        let commit = head.peel_to_commit().unwrap();
+        assert_eq!(commit.message().unwrap(), "Add test file");
+    }
 }

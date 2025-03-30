@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 pub use service::{Service, ServiceConfig, ServiceStatus};
 
-use crate::error::Result;
+use crate::error::{AureaCoreError, Result};
 use crate::registry::git::GitProvider;
 use crate::registry::store::ConfigStore;
 
@@ -44,9 +44,26 @@ impl ServiceRegistry {
     }
 
     /// Registers a new service configuration
-    pub fn register_service(&self, name: &str, config: &str) -> Result<()> {
+    pub fn register_service(&mut self, name: &str, config: &str) -> Result<()> {
+        // Save config to disk
         self.config_store.save_config(name, config)?;
+
+        // Parse config and create service instance
+        let service_config: ServiceConfig = serde_json::from_str(config)
+            .map_err(|e| AureaCoreError::Config(format!("Invalid service config: {}", e)))?;
+
+        // Create and store service instance
+        let service = Service::new(name.to_string(), service_config);
+        self.services.insert(name.to_string(), service);
+
         Ok(())
+    }
+
+    /// Gets a service by name
+    pub fn get_service(&self, name: &str) -> Result<&Service> {
+        self.services
+            .get(name)
+            .ok_or_else(|| AureaCoreError::Config(format!("Service '{}' not found", name)))
     }
 
     /// Lists all registered services
@@ -57,6 +74,16 @@ impl ServiceRegistry {
             .into_iter()
             .map(|p| p.file_stem().unwrap().to_string_lossy().into_owned())
             .collect())
+    }
+
+    /// Loads all service configurations from disk
+    pub fn load_services(&mut self) -> Result<()> {
+        let service_names = self.list_services()?;
+        for name in service_names {
+            let config = self.config_store.load_config(&name)?;
+            self.register_service(&name, &config)?;
+        }
+        Ok(())
     }
 }
 
@@ -118,9 +145,14 @@ mod tests {
         assert!(work_dir.join(".git").exists());
 
         // Test service registration
-        let test_config = r#"{"name": "test-service", "version": "1.0.0"}"#;
+        let test_config = r#"{"namespace": "test", "config_path": "test/config.yaml"}"#;
         let register_result = registry.register_service("test-service", test_config);
         assert!(register_result.is_ok());
+
+        // Test service retrieval
+        let service = registry.get_service("test-service").unwrap();
+        assert_eq!(service.name, "test-service");
+        assert_eq!(service.config.namespace, Some("test".to_string()));
 
         // Test service listing
         let services = registry.list_services().unwrap();
