@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "prepare": "husky",
-    "check": "./scripts/check.sh"
+    "check": "./scripts/check.sh",
+    "install-release-tools": "cargo install cargo-release cargo-conventional-commits"
   },
   "devDependencies": {
     "husky": "^9.0.11"

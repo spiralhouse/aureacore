@@ -1,0 +1,19 @@
+[package]
+# The current version will come from Cargo.toml
+
+[build]
+# Build configuration
+
+[cargo-release]
+# Configure the tag format
+tag-prefix = "v"
+# GitHub release configuration
+release = true
+# Don't publish to crates.io until you're ready
+publish = false
+# Use conventional commits to determine version bump
+# Update version based on conventional commit types:
+# - fix: patch bump
+# - feat: minor bump
+# - BREAKING CHANGE: major bump
+conventional-commits = true

@@ -190,14 +190,18 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 ```
 
 Types include:
-* `feat`: A new feature
-* `fix`: A bug fix
+* `feat`: A new feature (triggers minor version bump)
+* `fix`: A bug fix (triggers patch version bump)
 * `docs`: Documentation changes
 * `style`: Code style changes (formatting, etc)
 * `refactor`: Code changes that neither fix bugs nor add features
 * `perf`: Performance improvements
 * `test`: Adding or updating tests
 * `chore`: Routine tasks, maintenance, etc.
+
+Breaking changes indicated with `BREAKING CHANGE:` in the footer or `!` after the type (e.g., `feat!:`) will trigger major version bumps.
+
+For more information on the release process, see [Release Process](docs/RELEASE_PROCESS.md).
 
 ## License
 

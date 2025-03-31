@@ -104,3 +104,9 @@ jobs:
           files: coverage.lcov
           fail_ci_if_error: true
           verbose: true 
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
