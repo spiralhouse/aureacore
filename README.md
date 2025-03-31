@@ -54,6 +54,7 @@ Detailed documentation can be found in the [GitHub Wiki](https://github.com/spir
 * [Architecture](https://github.com/spiralhouse/aureacore/wiki/Architecture) - System architecture and design
 * [Guides](https://github.com/spiralhouse/aureacore/wiki/Guides) - How-to guides for common tasks
 * [API Documentation](https://github.com/spiralhouse/aureacore/wiki/API-Documentation) - API reference
+* [Implementation Plan](https://github.com/spiralhouse/aureacore/wiki/Implementation-Plan) - Phased approach with milestones and tasks
 * [Architecture Decision Records](https://github.com/spiralhouse/aureacore/wiki/Architecture-Decision-Records) - Records of architecture decisions
 * [Contributing](https://github.com/spiralhouse/aureacore/wiki/Contributing) - Guidelines for contributing to the project
 
@@ -62,7 +63,6 @@ Detailed documentation can be found in the [GitHub Wiki](https://github.com/spir
 ### Prerequisites
 
 * Rust 1.75 or later
-* MongoDB 7.0 or later
 * Node.js 20.0 or later (for UI development)
 
 ### Installation
@@ -71,12 +71,14 @@ Coming soon
 
 ## Development Status
 
-This project is currently in the architectural design phase. Implementation will begin once the core architectural decisions are finalized. Track our progress:
+This project is currently in active development. See our [Implementation Plan](https://github.com/spiralhouse/aureacore/wiki/Implementation-Plan) for detailed milestones and progress tracking.
 
+Current progress:
 - [x] Initial project setup
 - [x] Core architectural decisions
-- [ ] Service definition schema
-- [ ] Core service registry
+- [x] Service registry foundation
+- [🔄] Schema validation (in progress)
+- [ ] Dependency management
 - [ ] UI implementation
 - [ ] Integration interfaces
 
