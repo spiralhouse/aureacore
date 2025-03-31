@@ -22,3 +22,7 @@ coverage.lcov
 # OS
 .DS_Store
 Thumbs.db
+
+# Act (GitHub Actions local testing)
+.act/.secrets
+.act/.github_token
