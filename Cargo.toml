@@ -21,7 +21,7 @@ conventional-commits = true
 # Web Framework
 axum = { version = "0.7", features = ["macros"] }
 tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["full"] }
 
 # Schema Validation
 jsonschema = "0.17"
