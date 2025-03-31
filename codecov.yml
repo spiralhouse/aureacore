@@ -1,0 +1,30 @@
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        # basic
+        target: auto
+        threshold: 1%
+        base: auto
+    patch:
+      default:
+        # basic
+        target: 50%
+        threshold: 1%
+        base: auto
+
+ignore:
+  # Ignore import statements in main.rs (lines 1-7)
+  - "src/main.rs#L1-L7"
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
