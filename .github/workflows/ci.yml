@@ -146,12 +146,4 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.lcov
           fail_ci_if_error: true
-          verbose: true
-          
-      - name: Upload coverage to Codecov (Dependabot)
-        uses: codecov/codecov-action@v5
-        if: ${{ github.actor == 'dependabot[bot]' }}
-        with:
-          files: coverage.lcov
-          fail_ci_if_error: false
           verbose: true 
