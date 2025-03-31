@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use jsonschema::JSONSchema;
+use jsonschema::{validator_for, Validator};
 use schemars::schema_for;
 use semver::Version;
 
@@ -59,12 +59,12 @@ pub fn check_version_compatibility(version: &str, current: &str) -> VersionCompa
 /// A compiled JSON schema validator
 #[derive(Clone)]
 pub struct CompiledSchema {
-    schema: Arc<JSONSchema>,
+    schema: Arc<Validator>,
 }
 
 impl CompiledSchema {
     /// Creates a new compiled schema
-    pub fn new(schema: JSONSchema) -> Self {
+    pub fn new(schema: Validator) -> Self {
         Self { schema: Arc::new(schema) }
     }
 
@@ -72,9 +72,10 @@ impl CompiledSchema {
     pub fn validate(&self, value: &serde_json::Value) -> std::result::Result<(), Vec<String>> {
         match self.schema.validate(value) {
             Ok(_) => Ok(()),
-            Err(errors) => {
-                let error_strings: Vec<String> = errors.map(|err| format!("{}", err)).collect();
-                Err(error_strings)
+            Err(error) => {
+                // In the new version, errors are not directly iterable
+                // We need to convert a single error to a Vec
+                Err(vec![format!("{}", error)])
             }
         }
     }
@@ -127,7 +128,7 @@ impl ValidationService {
             }
         };
 
-        let schema = JSONSchema::compile(&schema_value).map_err(|e| {
+        let schema = validator_for(&schema_value).map_err(|e| {
             Error::SchemaCompilationError(format!("Failed to compile schema: {}", e))
         })?;
 
@@ -206,10 +207,124 @@ impl ValidationService {
             VersionCompatibility::Compatible
         }
     }
+
+    /// Validates dependencies between services
+    pub fn validate_dependencies(
+        &self,
+        service_name: &str,
+        config: &serde_json::Value,
+        available_services: &HashSet<String>,
+    ) -> Result<Vec<String>> {
+        let mut warnings = Vec::new();
+
+        // Extract dependencies from the configuration
+        if let Some(dependencies) = config.get("dependencies").and_then(|d| d.as_array()) {
+            for dep in dependencies {
+                if let Some(name) = dep.get("service").and_then(|n| n.as_str()) {
+                    if !available_services.contains(name) {
+                        let warning = format!(
+                            "Service '{}' depends on '{}', which is not registered in the catalog",
+                            service_name, name
+                        );
+                        warnings.push(warning);
+                    }
+                }
+            }
+        }
+
+        Ok(warnings)
+    }
+
+    /// Gets schema and performs validation with version compatibility check
+    fn perform_schema_validation(
+        &mut self,
+        config: &serde_json::Value,
+    ) -> (Result<()>, Option<String>) {
+        // Get the service schema
+        let schema_result = self.get_or_compile_schema(SchemaType::Service);
+        if let Err(err) = schema_result {
+            return (Err(err), None);
+        }
+        let schema = schema_result.unwrap();
+
+        // Extract version from config for compatibility check
+        let config_version =
+            config.get("schema_version").and_then(|v| v.as_str()).unwrap_or("1.0.0");
+
+        // Check version compatibility
+        let compatibility = check_version_compatibility(config_version, CURRENT_SCHEMA_VERSION);
+
+        match compatibility {
+            VersionCompatibility::Compatible => {
+                // Perform validation
+                match schema.validate(config) {
+                    Ok(_) => (Ok(()), None),
+                    Err(errors) => (
+                        Err(Error::ValidationError(format!(
+                            "Schema validation failed: {}",
+                            errors.join(", ")
+                        ))),
+                        None,
+                    ),
+                }
+            }
+            VersionCompatibility::MinorIncompatible => {
+                // Create warning but continue with validation
+                let warning = format!(
+                    "Minor schema version incompatibility: config version {} vs current {}",
+                    config_version, CURRENT_SCHEMA_VERSION
+                );
+
+                match schema.validate(config) {
+                    Ok(_) => (Ok(()), Some(warning)),
+                    Err(errors) => (
+                        Err(Error::ValidationError(format!(
+                            "Schema validation failed: {}",
+                            errors.join(", ")
+                        ))),
+                        None,
+                    ),
+                }
+            }
+            VersionCompatibility::MajorIncompatible => (
+                Err(Error::IncompatibleVersion(format!(
+                    "Schema version {} is incompatible with current version {}",
+                    config_version, CURRENT_SCHEMA_VERSION
+                ))),
+                None,
+            ),
+        }
+    }
+
+    /// Validates a service configuration with additional context
+    pub fn validate_service_with_context(
+        &mut self,
+        service_name: &str,
+        config: &serde_json::Value,
+        available_services: &HashSet<String>,
+    ) -> (Result<()>, Vec<String>) {
+        // First, validate dependencies which uses &self (immutable borrow)
+        let dependency_warnings = self
+            .validate_dependencies(service_name, config, available_services)
+            .unwrap_or_default();
+
+        // Next, perform schema validation which uses &mut self
+        let (validation_result, version_warning) = self.perform_schema_validation(config);
+
+        // Combine warnings
+        let mut all_warnings = dependency_warnings;
+        if let Some(warning) = version_warning {
+            all_warnings.push(warning);
+        }
+
+        (validation_result, all_warnings)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use serde_json::json;
 
     use super::*;
@@ -259,16 +374,20 @@ mod tests {
         let config = json!({
             "name": "test-service",
             "version": "1.0.0",
+            "schema_version": "1.0.0",
             "service_type": {
                 "type": "rest"
             },
             "endpoints": [
                 {
-                    "name": "test",
-                    "path": "/test"
+                    "name": "api",
+                    "path": "/api"
                 }
             ],
-            "schema_version": "1.0.0"
+            "metadata": {
+                "owner": "Test Team",
+                "description": "Test service"
+            }
         });
 
         let result = service.validate_service(&config);
@@ -298,15 +417,166 @@ mod tests {
         let config = json!({
             "name": "test-service",
             "version": "1.0.0",
+            "schema_version": "2.0.0", // Major version incompatibility
             "service_type": {
                 "type": "rest"
             },
             "endpoints": [],
-            "schema_version": "2.0.0" // Major version incompatibility
+            "metadata": {
+                "owner": "Test Team",
+                "description": "Test service"
+            }
         });
 
         let result = service.validate_service(&config);
         assert!(result.is_err());
         assert!(matches!(result, Err(Error::IncompatibleVersion(_))));
+    }
+
+    #[test]
+    fn test_dependency_validation() {
+        let service = ValidationService::new();
+
+        // Create a service with dependencies
+        let config = json!({
+            "name": "test-service",
+            "schema_version": "1.0.0",
+            "dependencies": [
+                {"service": "existing-service", "version_constraint": "1.0.0"},
+                {"service": "missing-service", "version_constraint": "1.0.0"}
+            ]
+        });
+
+        // Create a set of available services
+        let mut available_services = HashSet::new();
+        available_services.insert("existing-service".to_string());
+        available_services.insert("another-service".to_string());
+
+        // Validate dependencies
+        let warnings =
+            service.validate_dependencies("test-service", &config, &available_services).unwrap();
+
+        // Should have one warning for the missing service
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("missing-service"));
+
+        // Add all required services
+        available_services.insert("missing-service".to_string());
+
+        // Validate again
+        let warnings =
+            service.validate_dependencies("test-service", &config, &available_services).unwrap();
+
+        // Should have no warnings now
+        assert_eq!(warnings.len(), 0);
+    }
+
+    #[test]
+    fn test_validate_service_with_context() {
+        let mut service = ValidationService::new();
+
+        // Create a valid service with dependencies that matches the schema
+        let config = json!({
+            "name": "test-service",
+            "version": "1.0.0",
+            "schema_version": "1.0.0",
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                }
+            ],
+            "metadata": {
+                "owner": "Test Team",
+                "description": "Test service"
+            },
+            "dependencies": [
+                {
+                    "service": "existing-service",
+                    "version_constraint": "1.0.0"
+                },
+                {
+                    "service": "missing-service",
+                    "version_constraint": "1.0.0"
+                }
+            ]
+        });
+
+        // Create a set of available services
+        let mut available_services = HashSet::new();
+        available_services.insert("existing-service".to_string());
+
+        // Validate with context
+        let (result, warnings) =
+            service.validate_service_with_context("test-service", &config, &available_services);
+
+        // Validation should succeed but with warnings
+        assert!(result.is_ok(), "Validation failed: {:?}", result);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("missing-service"));
+
+        // Test with incompatible version
+        let incompatible_config = json!({
+            "name": "test-service",
+            "version": "1.0.0",
+            "schema_version": "2.0.0",  // Major version incompatibility
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                }
+            ],
+            "metadata": {
+                "owner": "Test Team",
+                "description": "Test service"
+            }
+        });
+
+        let (result, warnings) = service.validate_service_with_context(
+            "test-service",
+            &incompatible_config,
+            &available_services,
+        );
+
+        // Validation should fail due to version incompatibility
+        assert!(result.is_err());
+        assert_eq!(warnings.len(), 0);
+
+        // Test with minor incompatible version
+        let minor_incompatible_config = json!({
+            "name": "test-service",
+            "version": "1.0.0",
+            "schema_version": "1.1.0",  // Minor version incompatibility
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                }
+            ],
+            "metadata": {
+                "owner": "Test Team",
+                "description": "Test service"
+            }
+        });
+
+        let (result, warnings) = service.validate_service_with_context(
+            "test-service",
+            &minor_incompatible_config,
+            &available_services,
+        );
+
+        // Validation should succeed with warning for minor version incompatibility
+        assert!(result.is_ok(), "Validation failed: {:?}", result);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Minor schema version incompatibility"));
     }
 }

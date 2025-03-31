@@ -82,11 +82,20 @@ fn display_validation_summary(summary: &ValidationSummary) {
     println!("Total services: {}", summary.total_count());
     println!("Successful: {}", summary.successful_count());
     println!("Failed: {}", summary.failed_count());
+    println!("Warnings: {}", summary.warning_count());
+    println!("Timestamp: {}", summary.timestamp.format("%Y-%m-%d %H:%M:%S UTC"));
 
     if !summary.successful.is_empty() {
         println!("\nSuccessful services:");
         for service in &summary.successful {
             println!("  ✅ {}", service);
+        }
+    }
+
+    if !summary.warnings.is_empty() {
+        println!("\nWarnings:");
+        for (service, warning) in &summary.warnings {
+            println!("  ⚠️  {}: {}", service, warning);
         }
     }
 

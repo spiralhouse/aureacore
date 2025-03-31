@@ -34,7 +34,7 @@ pub struct ServiceRef {
 
 #[cfg(test)]
 mod tests {
-    use jsonschema::JSONSchema;
+    use jsonschema::validator_for;
     use schemars::schema_for;
     use serde_json::json;
 
@@ -44,64 +44,65 @@ mod tests {
     fn test_valid_root_config() {
         let schema =
             serde_json::to_value(schema_for!(RootConfig)).expect("Failed to compile schema");
-        let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
+        let validator = validator_for(&schema).expect("Failed to compile schema");
 
         let config = json!({
-            "version": "1.0",
+            "version": "1.0.0",
             "global": {
                 "config_dir": "/etc/aureacore/configs",
                 "default_namespace": "default"
             },
             "services": [
                 {
-                    "name": "test-service",
-                    "config_path": "services/test-service/config.yaml",
+                    "name": "service1",
+                    "config_path": "services/service1/config.yaml",
                     "namespace": "test"
                 }
             ]
         });
 
-        let validation = validator.validate(&config);
-        assert!(validation.is_ok());
+        let result = validator.validate(&config);
+        assert!(result.is_ok(), "Validation failed: {:?}", result);
     }
 
     #[test]
     fn test_invalid_root_config_missing_required() {
         let schema =
             serde_json::to_value(schema_for!(RootConfig)).expect("Failed to compile schema");
-        let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
+        let validator = validator_for(&schema).expect("Failed to compile schema");
 
         let config = json!({
-            "version": "1.0",
-            "services": []
+            "version": "1.0.0",
             // Missing global section
+            "services": []
         });
 
-        let validation = validator.validate(&config);
-        assert!(validation.is_err(), "Expected validation to fail");
+        let result = validator.validate(&config);
+        assert!(result.is_err(), "Validation should fail");
     }
 
     #[test]
     fn test_invalid_service_ref() {
         let schema =
             serde_json::to_value(schema_for!(RootConfig)).expect("Failed to compile schema");
-        let validator = JSONSchema::compile(&schema).expect("Failed to compile schema");
+        let validator = validator_for(&schema).expect("Failed to compile schema");
 
         let config = json!({
-            "version": "1.0",
+            "version": "1.0.0",
             "global": {
                 "config_dir": "/etc/aureacore/configs",
                 "default_namespace": "default"
             },
             "services": [
                 {
-                    "name": "auth-service"
-                    // Missing required config_path
+                    // Missing name
+                    "config_path": "services/service1/config.yaml",
+                    "namespace": "test"
                 }
             ]
         });
 
-        let validation = validator.validate(&config);
-        assert!(validation.is_err(), "Expected validation to fail");
+        let result = validator.validate(&config);
+        assert!(result.is_err(), "Validation should fail");
     }
 }
