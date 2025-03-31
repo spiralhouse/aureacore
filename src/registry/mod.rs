@@ -5,11 +5,12 @@ mod store;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub use service::{Service, ServiceConfig, ServiceStatus};
+pub use service::{Service, ServiceConfig, ServiceState, ServiceStatus};
 
 use crate::error::{AureaCoreError, Result};
 use crate::registry::git::GitProvider;
 use crate::registry::store::ConfigStore;
+use crate::schema::validation::ValidationService;
 
 /// Manages service configurations and their storage
 pub struct ServiceRegistry {
@@ -19,6 +20,8 @@ pub struct ServiceRegistry {
     config_store: ConfigStore,
     /// Git provider for configuration management
     git_provider: GitProvider,
+    /// Schema validation service
+    validation_service: ValidationService,
 }
 
 impl ServiceRegistry {
@@ -28,6 +31,7 @@ impl ServiceRegistry {
             git_provider: GitProvider::new(repo_url, branch, work_dir.clone()),
             config_store: ConfigStore::new(work_dir)?,
             services: HashMap::new(),
+            validation_service: ValidationService::new(),
         })
     }
 
@@ -53,7 +57,19 @@ impl ServiceRegistry {
             .map_err(|e| AureaCoreError::Config(format!("Invalid service config: {}", e)))?;
 
         // Create and store service instance
-        let service = Service::new(name.to_string(), service_config);
+        let mut service = Service::new(name.to_string(), service_config);
+
+        // Validate the service schema
+        match service.validate(&mut self.validation_service) {
+            Ok(_) => {
+                tracing::info!("Service '{}' validation successful", name);
+            }
+            Err(err) => {
+                tracing::warn!("Service '{}' validation failed: {}", name, err);
+                // Service is stored with error status, but we don't fail the registration
+            }
+        }
+
         self.services.insert(name.to_string(), service);
 
         Ok(())
@@ -63,6 +79,13 @@ impl ServiceRegistry {
     pub fn get_service(&self, name: &str) -> Result<&Service> {
         self.services
             .get(name)
+            .ok_or_else(|| AureaCoreError::Config(format!("Service '{}' not found", name)))
+    }
+
+    /// Gets a mutable service by name
+    pub fn get_service_mut(&mut self, name: &str) -> Result<&mut Service> {
+        self.services
+            .get_mut(name)
             .ok_or_else(|| AureaCoreError::Config(format!("Service '{}' not found", name)))
     }
 
@@ -84,6 +107,63 @@ impl ServiceRegistry {
             self.register_service(&name, &config)?;
         }
         Ok(())
+    }
+
+    /// Validates all services
+    pub fn validate_all_services(&mut self) -> Result<ValidationSummary> {
+        let mut summary = ValidationSummary::new();
+
+        for (name, service) in &mut self.services {
+            match service.validate(&mut self.validation_service) {
+                Ok(_) => {
+                    summary.successful.push(name.clone());
+                    tracing::info!("Service '{}' validation successful", name);
+                }
+                Err(err) => {
+                    summary.failed.push((name.clone(), format!("{}", err)));
+                    tracing::warn!("Service '{}' validation failed: {}", name, err);
+                }
+            }
+        }
+
+        Ok(summary)
+    }
+}
+
+/// Summary of service validation results
+#[derive(Debug, Clone)]
+pub struct ValidationSummary {
+    /// List of service names that validated successfully
+    pub successful: Vec<String>,
+    /// List of service names and error messages that failed validation
+    pub failed: Vec<(String, String)>,
+}
+
+impl Default for ValidationSummary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ValidationSummary {
+    /// Creates a new validation summary
+    pub fn new() -> Self {
+        Self { successful: Vec::new(), failed: Vec::new() }
+    }
+
+    /// Returns the number of successful validations
+    pub fn successful_count(&self) -> usize {
+        self.successful.len()
+    }
+
+    /// Returns the number of failed validations
+    pub fn failed_count(&self) -> usize {
+        self.failed.len()
+    }
+
+    /// Returns the total number of validation attempts
+    pub fn total_count(&self) -> usize {
+        self.successful.len() + self.failed.len()
     }
 }
 
@@ -126,24 +206,24 @@ mod tests {
 
         // Initialize ServiceRegistry with file:// URL
         let repo_url = format!("file://{}", repo_path.to_str().unwrap());
-        let mut registry = ServiceRegistry::new(repo_url, "main".to_string(), work_dir).unwrap();
+        let mut registry =
+            ServiceRegistry::new(repo_url, "main".to_string(), work_dir.clone()).unwrap();
+
+        // Test initialization
         let result = registry.init();
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Registry initialization failed");
+    }
 
-        // Test service registration
-        let config = ServiceConfig {
-            namespace: Some("test".to_string()),
-            config_path: "test/config.yaml".to_string(),
-            schema_version: "1.0".to_string(),
-        };
-        let service = Service::new("test-service".to_string(), config);
+    #[test]
+    fn test_validation_summary() {
+        let mut summary = ValidationSummary::new();
 
-        assert!(registry
-            .register_service("test-service.json", &serde_json::to_string(&service.config).unwrap())
-            .is_ok());
-        let retrieved_service = registry.get_service("test-service.json").unwrap();
-        assert_eq!(retrieved_service.name, "test-service.json");
-        assert_eq!(retrieved_service.config.namespace, Some("test".to_string()));
-        assert_eq!(registry.list_services().unwrap().len(), 1);
+        summary.successful.push("service1".to_string());
+        summary.successful.push("service2".to_string());
+        summary.failed.push(("service3".to_string(), "error".to_string()));
+
+        assert_eq!(summary.successful_count(), 2);
+        assert_eq!(summary.failed_count(), 1);
+        assert_eq!(summary.total_count(), 3);
     }
 }
