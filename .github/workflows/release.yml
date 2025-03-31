@@ -1,22 +1,22 @@
 name: Release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches:
       - main
-    paths-ignore:
-      - 'CHANGELOG.md'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
 
 jobs:
   check-release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
       should_release: ${{ steps.conventional-commits-release.outputs.release }}
       next_version: ${{ steps.conventional-commits-release.outputs.version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       
@@ -46,7 +46,7 @@ jobs:
     if: ${{ needs.check-release.outputs.should_release == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}

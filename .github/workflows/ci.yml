@@ -9,6 +9,7 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/ci.yml'
       - 'deny.toml'
+      - 'codecov.yml'
   pull_request:
     branches: [ main ]
     paths:
@@ -17,6 +18,7 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/ci.yml'
       - 'deny.toml'
+      - 'codecov.yml'
 
 env:
   CARGO_TERM_COLOR: always
@@ -47,15 +49,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+        uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -96,4 +90,59 @@ jobs:
         run: cargo install cargo-deny
 
       - name: Check dependencies
-        run: cargo deny check 
+        run: cargo deny check
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+      LLVM_PROFILE_FILE: "coverage-%p-%m.profraw"
+    services:
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install nightly --component llvm-tools-preview
+          rustup override set nightly
+          rustup show
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
+
+      - name: Install grcov
+        run: |
+          mkdir -p "${HOME}/.local/bin"
+          curl -sL https://github.com/mozilla/grcov/releases/download/v0.8.18/grcov-x86_64-unknown-linux-gnu.tar.bz2 | tar jxf - -C "${HOME}/.local/bin"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Run tests with coverage
+        run: |
+          cargo clean
+          CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' cargo test --verbose
+        env:
+          REDIS_URL: redis://localhost:6379
+
+      - name: Generate coverage report
+        run: |
+          grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.lcov
+          fail_ci_if_error: true
+          verbose: true 
