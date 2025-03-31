@@ -1,0 +1,40 @@
+name: Release Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Mock version detection
+        id: check
+        run: |
+          echo "Current version: 0.1.0"
+          echo "Next version would be: 0.1.1"
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=0.1.1" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: check-release
+    if: ${{ needs.check-release.outputs.should_release == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Mock release process
+        run: |
+          echo "Creating release version ${{ needs.check-release.outputs.version }}"
+          echo "Updating CHANGELOG.md"
+          echo "Creating git tag"
+
+      - name: Mock GitHub Release creation
+        run: |
+          echo "Creating GitHub Release v${{ needs.check-release.outputs.version }}"
