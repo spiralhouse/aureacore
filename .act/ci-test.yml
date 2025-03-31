@@ -1,0 +1,29 @@
+name: CI Test
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Mock Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mock Test
+        run: |
+          echo "Running mock tests..."
+          echo "Tests completed successfully"
+
+  mock-coverage:
+    name: Mock Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mock Coverage
+        run: |
+          echo "Running mock coverage..."
+          echo "Coverage analysis complete"
+          echo "Coverage: 85.4%"

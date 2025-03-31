@@ -1,18 +1,22 @@
 name: Release Test
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
     branches:
       - main
 
 jobs:
   check-release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     outputs:
-      should_release: ${{ steps.check.outputs.should_release }}
-      version: ${{ steps.check.outputs.version }}
+      should_release: true
+      next_version: "0.1.1"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Mock version detection
         id: check
@@ -27,14 +31,13 @@ jobs:
     if: ${{ needs.check-release.outputs.should_release == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Mock release process
         run: |
-          echo "Creating release version ${{ needs.check-release.outputs.version }}"
+          echo "Creating release version ${{ needs.check-release.outputs.next_version }}"
           echo "Updating CHANGELOG.md"
-          echo "Creating git tag"
 
       - name: Mock GitHub Release creation
         run: |
-          echo "Creating GitHub Release v${{ needs.check-release.outputs.version }}"
+          echo "Creating GitHub Release v${{ needs.check-release.outputs.next_version }}"
