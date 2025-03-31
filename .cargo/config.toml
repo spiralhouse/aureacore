@@ -1,7 +1,7 @@
 [package]
 # The current version will come from Cargo.toml
 
-[workspace.metadata.release]
+[cargo-release]
 # Configuration for cargo-release
 pre-release-replacements = [
     { file = "README.md", search = "spiralhouse/aureacore/releases/tag/v[0-9\\.]+", replace = "spiralhouse/aureacore/releases/tag/v{{version}}" },
