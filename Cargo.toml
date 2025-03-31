@@ -20,7 +20,7 @@ conventional-commits = true
 [workspace.dependencies]
 # Web Framework
 axum = { version = "0.8", features = ["macros"] }
-tower = { version = "0.4", features = ["full"] }
+tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["full"] }
 
 # Schema Validation
