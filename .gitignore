@@ -1,2 +1,24 @@
 # Node.js
 node_modules/
+package-lock.json
+
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+
+# Coverage
+coverage*.profraw
+coverage.lcov
+*.gcda
+*.gcno
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

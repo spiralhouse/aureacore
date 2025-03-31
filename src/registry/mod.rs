@@ -134,6 +134,7 @@ mod tests {
         let config = ServiceConfig {
             namespace: Some("test".to_string()),
             config_path: "test/config.yaml".to_string(),
+            schema_version: "1.0".to_string(),
         };
         let service = Service::new("test-service".to_string(), config);
 
