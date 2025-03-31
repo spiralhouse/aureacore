@@ -120,7 +120,7 @@ impl Service {
     }
 
     /// Loads the service schema data from the config path
-    fn load_schema_data(&mut self) -> Result<&serde_json::Value> {
+    pub fn load_schema_data(&mut self) -> Result<&serde_json::Value> {
         if self.schema_data.is_none() {
             let config_path = Path::new(&self.config.config_path);
 

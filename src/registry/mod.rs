@@ -113,15 +113,75 @@ impl ServiceRegistry {
     pub fn validate_all_services(&mut self) -> Result<ValidationSummary> {
         let mut summary = ValidationSummary::new();
 
+        // Get all service names for dependency validation
+        let service_names: std::collections::HashSet<String> =
+            self.services.keys().cloned().collect();
+
+        // First pass: perform schema validation on all services
         for (name, service) in &mut self.services {
-            match service.validate(&mut self.validation_service) {
-                Ok(_) => {
-                    summary.successful.push(name.clone());
-                    tracing::info!("Service '{}' validation successful", name);
+            if let Some(schema_data) = &service.schema_data {
+                let (result, warnings) = self.validation_service.validate_service_with_context(
+                    name,
+                    schema_data,
+                    &service_names,
+                );
+
+                // Add any warnings to the summary
+                for warning in &warnings {
+                    summary.add_warning(name.clone(), warning.clone());
+                    tracing::warn!("Service '{}' validation warning: {}", name, warning);
                 }
-                Err(err) => {
-                    summary.failed.push((name.clone(), format!("{}", err)));
-                    tracing::warn!("Service '{}' validation failed: {}", name, err);
+
+                match result {
+                    Ok(_) => {
+                        summary.successful.push(name.clone());
+                        service.status = ServiceStatus::new(ServiceState::Active);
+                        tracing::info!("Service '{}' validation successful", name);
+                    }
+                    Err(err) => {
+                        let error_message = format!("{}", err);
+                        summary.failed.push((name.clone(), error_message.clone()));
+                        service.status =
+                            ServiceStatus::new(ServiceState::Error).with_error(error_message);
+                        tracing::warn!("Service '{}' validation failed: {}", name, err);
+                    }
+                }
+            } else {
+                // Load schema data if not already loaded
+                match service.load_schema_data() {
+                    Ok(schema_data) => {
+                        let (result, warnings) = self
+                            .validation_service
+                            .validate_service_with_context(name, schema_data, &service_names);
+
+                        // Add any warnings to the summary
+                        for warning in &warnings {
+                            summary.add_warning(name.clone(), warning.clone());
+                            tracing::warn!("Service '{}' validation warning: {}", name, warning);
+                        }
+
+                        match result {
+                            Ok(_) => {
+                                summary.successful.push(name.clone());
+                                service.status = ServiceStatus::new(ServiceState::Active);
+                                tracing::info!("Service '{}' validation successful", name);
+                            }
+                            Err(err) => {
+                                let error_message = format!("{}", err);
+                                summary.failed.push((name.clone(), error_message.clone()));
+                                service.status = ServiceStatus::new(ServiceState::Error)
+                                    .with_error(error_message);
+                                tracing::warn!("Service '{}' validation failed: {}", name, err);
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        let error_message = format!("Failed to load schema data: {}", err);
+                        summary.failed.push((name.clone(), error_message.clone()));
+                        service.status =
+                            ServiceStatus::new(ServiceState::Error).with_error(error_message);
+                        tracing::error!("Service '{}' schema data loading failed: {}", name, err);
+                    }
                 }
             }
         }
@@ -137,6 +197,10 @@ pub struct ValidationSummary {
     pub successful: Vec<String>,
     /// List of service names and error messages that failed validation
     pub failed: Vec<(String, String)>,
+    /// List of warnings generated during validation
+    pub warnings: Vec<(String, String)>,
+    /// Validation timestamp
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 impl Default for ValidationSummary {
@@ -148,7 +212,12 @@ impl Default for ValidationSummary {
 impl ValidationSummary {
     /// Creates a new validation summary
     pub fn new() -> Self {
-        Self { successful: Vec::new(), failed: Vec::new() }
+        Self {
+            successful: Vec::new(),
+            failed: Vec::new(),
+            warnings: Vec::new(),
+            timestamp: chrono::Utc::now(),
+        }
     }
 
     /// Returns the number of successful validations
@@ -161,9 +230,24 @@ impl ValidationSummary {
         self.failed.len()
     }
 
+    /// Returns the number of warnings
+    pub fn warning_count(&self) -> usize {
+        self.warnings.len()
+    }
+
     /// Returns the total number of validation attempts
     pub fn total_count(&self) -> usize {
         self.successful.len() + self.failed.len()
+    }
+
+    /// Adds a warning to the summary
+    pub fn add_warning(&mut self, service_name: String, warning: String) {
+        self.warnings.push((service_name, warning));
+    }
+
+    /// Checks if the validation was successful (no failures)
+    pub fn is_successful(&self) -> bool {
+        self.failed.is_empty()
     }
 }
 
@@ -225,5 +309,44 @@ mod tests {
         assert_eq!(summary.successful_count(), 2);
         assert_eq!(summary.failed_count(), 1);
         assert_eq!(summary.total_count(), 3);
+    }
+
+    #[test]
+    fn test_enhanced_validation_summary() {
+        let mut summary = ValidationSummary::new();
+
+        // Add successful services
+        summary.successful.push("service1".to_string());
+        summary.successful.push("service2".to_string());
+
+        // Add warnings
+        summary.add_warning(
+            "service2".to_string(),
+            "Optional dependency 'service3' not found".to_string(),
+        );
+        summary.add_warning(
+            "service1".to_string(),
+            "Minor schema version incompatibility".to_string(),
+        );
+
+        // Add failures
+        summary.failed.push(("service3".to_string(), "Schema validation failed".to_string()));
+
+        // Verify counts
+        assert_eq!(summary.successful_count(), 2);
+        assert_eq!(summary.failed_count(), 1);
+        assert_eq!(summary.warning_count(), 2);
+        assert_eq!(summary.total_count(), 3);
+
+        // Verify successful flag
+        assert!(!summary.is_successful());
+
+        // Create a successful summary
+        let mut successful_summary = ValidationSummary::new();
+        successful_summary.successful.push("service1".to_string());
+        successful_summary.add_warning("service1".to_string(), "Minor warning".to_string());
+
+        // Verify it's considered successful (warnings don't count as failures)
+        assert!(successful_summary.is_successful());
     }
 }
