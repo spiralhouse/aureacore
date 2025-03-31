@@ -59,8 +59,12 @@ impl ServiceRegistry {
         // Create and store service instance
         let mut service = Service::new(name.to_string(), service_config);
 
+        // Get all service names for dependency validation
+        let service_names: std::collections::HashSet<String> =
+            self.services.keys().cloned().collect();
+
         // Validate the service schema
-        match service.validate(&mut self.validation_service) {
+        match service.validate(&mut self.validation_service, &service_names) {
             Ok(_) => {
                 tracing::info!("Service '{}' validation successful", name);
             }
@@ -117,9 +121,10 @@ impl ServiceRegistry {
         let service_names: std::collections::HashSet<String> =
             self.services.keys().cloned().collect();
 
-        // First pass: perform schema validation on all services
+        // Perform validation on all services
         for (name, service) in &mut self.services {
             if let Some(schema_data) = &service.schema_data {
+                // Use the full validation with context
                 let (result, warnings) = self.validation_service.validate_service_with_context(
                     name,
                     schema_data,
@@ -135,14 +140,16 @@ impl ServiceRegistry {
                 match result {
                     Ok(_) => {
                         summary.successful.push(name.clone());
-                        service.status = ServiceStatus::new(ServiceState::Active);
+                        service.status =
+                            ServiceStatus::new(ServiceState::Active).with_warnings(warnings);
                         tracing::info!("Service '{}' validation successful", name);
                     }
                     Err(err) => {
                         let error_message = format!("{}", err);
                         summary.failed.push((name.clone(), error_message.clone()));
-                        service.status =
-                            ServiceStatus::new(ServiceState::Error).with_error(error_message);
+                        service.status = ServiceStatus::new(ServiceState::Error)
+                            .with_error(error_message)
+                            .with_warnings(warnings);
                         tracing::warn!("Service '{}' validation failed: {}", name, err);
                     }
                 }
@@ -163,14 +170,16 @@ impl ServiceRegistry {
                         match result {
                             Ok(_) => {
                                 summary.successful.push(name.clone());
-                                service.status = ServiceStatus::new(ServiceState::Active);
+                                service.status = ServiceStatus::new(ServiceState::Active)
+                                    .with_warnings(warnings);
                                 tracing::info!("Service '{}' validation successful", name);
                             }
                             Err(err) => {
                                 let error_message = format!("{}", err);
                                 summary.failed.push((name.clone(), error_message.clone()));
                                 service.status = ServiceStatus::new(ServiceState::Error)
-                                    .with_error(error_message);
+                                    .with_error(error_message)
+                                    .with_warnings(warnings);
                                 tracing::warn!("Service '{}' validation failed: {}", name, err);
                             }
                         }
