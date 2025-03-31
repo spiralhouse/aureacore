@@ -77,7 +77,7 @@ fn default_true() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use jsonschema::JSONSchema;
+    use jsonschema::validator_for;
     use schemars::schema_for;
     use serde_json::json;
 
@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn test_valid_service_schema() {
         let schema = serde_json::to_value(schema_for!(ServiceSchema)).unwrap();
-        let validator = JSONSchema::compile(&schema).unwrap();
+        let validator = validator_for(&schema).unwrap();
 
         let config = json!({
             "name": "auth-service",
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn test_invalid_service_schema() {
         let schema = serde_json::to_value(schema_for!(ServiceSchema)).unwrap();
-        let validator = JSONSchema::compile(&schema).unwrap();
+        let validator = validator_for(&schema).unwrap();
 
         let config = json!({
             "name": "auth-service",
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_service_schema_with_custom_service_type() {
         let schema = serde_json::to_value(schema_for!(ServiceSchema)).unwrap();
-        let validator = JSONSchema::compile(&schema).unwrap();
+        let validator = validator_for(&schema).unwrap();
 
         let config = json!({
             "name": "legacy-service",
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn test_service_schema_with_metadata() {
         let schema = serde_json::to_value(schema_for!(ServiceSchema)).unwrap();
-        let validator = JSONSchema::compile(&schema).unwrap();
+        let validator = validator_for(&schema).unwrap();
 
         let config = json!({
             "name": "metrics-service",

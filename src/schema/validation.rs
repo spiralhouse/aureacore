@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use jsonschema::JSONSchema;
+use jsonschema::{validator_for, Validator};
 use schemars::schema_for;
 use semver::Version;
 
@@ -59,12 +59,12 @@ pub fn check_version_compatibility(version: &str, current: &str) -> VersionCompa
 /// A compiled JSON schema validator
 #[derive(Clone)]
 pub struct CompiledSchema {
-    schema: Arc<JSONSchema>,
+    schema: Arc<Validator>,
 }
 
 impl CompiledSchema {
     /// Creates a new compiled schema
-    pub fn new(schema: JSONSchema) -> Self {
+    pub fn new(schema: Validator) -> Self {
         Self { schema: Arc::new(schema) }
     }
 
@@ -72,9 +72,10 @@ impl CompiledSchema {
     pub fn validate(&self, value: &serde_json::Value) -> std::result::Result<(), Vec<String>> {
         match self.schema.validate(value) {
             Ok(_) => Ok(()),
-            Err(errors) => {
-                let error_strings: Vec<String> = errors.map(|err| format!("{}", err)).collect();
-                Err(error_strings)
+            Err(error) => {
+                // In the new version, errors are not directly iterable
+                // We need to convert a single error to a Vec
+                Err(vec![format!("{}", error)])
             }
         }
     }
@@ -127,7 +128,7 @@ impl ValidationService {
             }
         };
 
-        let schema = JSONSchema::compile(&schema_value).map_err(|e| {
+        let schema = validator_for(&schema_value).map_err(|e| {
             Error::SchemaCompilationError(format!("Failed to compile schema: {}", e))
         })?;
 
