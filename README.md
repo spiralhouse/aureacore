@@ -48,13 +48,14 @@ AureaCore is part of SpiralHouse's suite of open-source tools dedicated to enhan
 
 ## Documentation
 
-Detailed documentation can be found in the `docs` directory:
+Detailed documentation can be found in the [GitHub Wiki](https://github.com/spiralhouse/aureacore/wiki):
 
-* [Architecture Decisions](docs/adr) - Architectural decision records
-* System Overview (coming soon)
-* Integration Guide (coming soon)
-* User Guide (coming soon)
-* Operations Guide (coming soon)
+* [Getting Started](https://github.com/spiralhouse/aureacore/wiki/Getting-Started) - Installation and quick start guides
+* [Architecture](https://github.com/spiralhouse/aureacore/wiki/Architecture) - System architecture and design
+* [Guides](https://github.com/spiralhouse/aureacore/wiki/Guides) - How-to guides for common tasks
+* [API Documentation](https://github.com/spiralhouse/aureacore/wiki/API-Documentation) - API reference
+* [Architecture Decision Records](https://github.com/spiralhouse/aureacore/wiki/Architecture-Decision-Records) - Records of architecture decisions
+* [Contributing](https://github.com/spiralhouse/aureacore/wiki/Contributing) - Guidelines for contributing to the project
 
 ## Getting Started
 
@@ -81,7 +82,7 @@ This project is currently in the architectural design phase. Implementation will
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a pull request.
+Contributions are welcome! Please read our [Contributing Guidelines](https://github.com/spiralhouse/aureacore/wiki/Contributing) before submitting a pull request.
 
 ### Development Setup
 
