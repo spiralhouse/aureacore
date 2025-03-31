@@ -29,7 +29,7 @@ schemars = { version = "0.8", features = ["derive"] }
 semver = "1.0"
 
 # Git Integration
-git2 = { version = "0.18", features = ["vendored-openssl"] }
+git2 = { version = "0.20", features = ["vendored-openssl"] }
 
 # Date and Time
 chrono = { version = "0.4.35", features = ["serde"] }
