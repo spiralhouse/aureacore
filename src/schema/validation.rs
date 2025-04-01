@@ -296,28 +296,152 @@ impl ValidationService {
         }
     }
 
-    /// Validates a service configuration with additional context
+    /// Validates a service based on its specific service type
+    fn validate_service_type(&self, service_name: &str, config: &serde_json::Value) -> Vec<String> {
+        let mut warnings = Vec::new();
+
+        // Extract service type
+        let service_type =
+            match config.get("service_type").and_then(|st| st.get("type")).and_then(|t| t.as_str())
+            {
+                Some(t) => t,
+                None => return warnings, // No service type, nothing to validate
+            };
+
+        // Validate based on service type
+        match service_type {
+            "rest" => {
+                // Validate REST-specific requirements
+                if let Some(endpoints) = config.get("endpoints").and_then(|e| e.as_array()) {
+                    for (i, endpoint) in endpoints.iter().enumerate() {
+                        // Check if REST endpoints have method specified
+                        if endpoint.get("method").is_none() {
+                            warnings.push(format!(
+                                "Service '{}' is a REST service but endpoint #{} doesn't specify an HTTP method",
+                                service_name, i+1
+                            ));
+                        }
+                    }
+                }
+            }
+            "graphql" => {
+                // Validate GraphQL-specific requirements
+                let has_schema =
+                    config.get("metadata").and_then(|m| m.get("graphql_schema")).is_some();
+
+                if !has_schema {
+                    warnings.push(format!(
+                        "Service '{}' is a GraphQL service but doesn't specify a graphql_schema in metadata",
+                        service_name
+                    ));
+                }
+            }
+            "grpc" => {
+                // Validate gRPC-specific requirements
+                let has_proto = config.get("metadata").and_then(|m| m.get("proto_files")).is_some();
+
+                if !has_proto {
+                    warnings.push(format!(
+                        "Service '{}' is a gRPC service but doesn't specify proto_files in metadata",
+                        service_name
+                    ));
+                }
+            }
+            "event_driven" => {
+                // Validate event-driven service requirements
+                let has_topics = config.get("metadata").and_then(|m| m.get("topics")).is_some();
+
+                if !has_topics {
+                    warnings.push(format!(
+                        "Service '{}' is an event-driven service but doesn't specify topics in metadata",
+                        service_name
+                    ));
+                }
+            }
+            _ => {
+                // For custom types, just verify they have a description
+                if config.get("description").is_none() {
+                    warnings.push(format!(
+                        "Service '{}' uses a custom service type '{}' but doesn't provide a description",
+                        service_name, service_type
+                    ));
+                }
+            }
+        }
+
+        warnings
+    }
+
+    /// Validates a service configuration with context for dependency validation
+    /// Returns a tuple of (Result, Vec<Warnings>)
     pub fn validate_service_with_context(
         &mut self,
         service_name: &str,
         config: &serde_json::Value,
         available_services: &HashSet<String>,
     ) -> (Result<()>, Vec<String>) {
-        // First, validate dependencies which uses &self (immutable borrow)
-        let dependency_warnings = self
-            .validate_dependencies(service_name, config, available_services)
-            .unwrap_or_default();
+        let mut warnings = Vec::new();
 
-        // Next, perform schema validation which uses &mut self
-        let (validation_result, version_warning) = self.perform_schema_validation(config);
+        // Extract version from config for compatibility check
+        let config_version =
+            config.get("schema_version").and_then(|v| v.as_str()).unwrap_or("1.0.0");
 
-        // Combine warnings
-        let mut all_warnings = dependency_warnings;
-        if let Some(warning) = version_warning {
-            all_warnings.push(warning);
+        // Check version compatibility
+        let compatibility = check_version_compatibility(config_version, CURRENT_SCHEMA_VERSION);
+
+        match compatibility {
+            VersionCompatibility::Compatible => {
+                // Compatible, proceed with validation
+            }
+            VersionCompatibility::MinorIncompatible => {
+                // Minor incompatibility, add warning but continue
+                let warning_msg = format!(
+                    "Service '{}' uses schema version {} which has minor differences from the current version {}. Some features may not be validated correctly.",
+                    service_name,
+                    config_version,
+                    CURRENT_SCHEMA_VERSION
+                );
+                warnings.push(warning_msg);
+                // Log the warning
+                tracing::warn!(
+                    "Minor schema version incompatibility for service '{}': config version {} vs current {}",
+                    service_name,
+                    config_version,
+                    CURRENT_SCHEMA_VERSION
+                );
+            }
+            VersionCompatibility::MajorIncompatible => {
+                // Major incompatibility, return error
+                return (
+                    Err(Error::IncompatibleVersion(format!(
+                        "Schema version {} is incompatible with current version {}",
+                        config_version, CURRENT_SCHEMA_VERSION
+                    ))),
+                    warnings,
+                );
+            }
         }
 
-        (validation_result, all_warnings)
+        // Validate dependencies
+        if let Ok(dependency_warnings) =
+            self.validate_dependencies(service_name, config, available_services)
+        {
+            warnings.extend(dependency_warnings);
+        }
+
+        // Validate service-specific fields
+        warnings.extend(self.validate_service_type(service_name, config));
+
+        // Get schema and perform validation
+        let (validation_result, schema_warning) = self.perform_schema_validation(config);
+
+        // If we have a schema warning, add it
+        if let Some(warning) = schema_warning {
+            warnings.push(warning);
+        }
+
+        // Return the result and all warnings
+        (validation_result, warnings)
     }
 }
 
@@ -515,8 +639,17 @@ mod tests {
 
         // Validation should succeed but with warnings
         assert!(result.is_ok(), "Validation failed: {:?}", result);
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("missing-service"));
+        // Now we get two warnings: one for missing service, one for missing HTTP method in REST endpoint
+        assert_eq!(warnings.len(), 2);
+        // Verify the warnings contain what we expect
+        assert!(
+            warnings.iter().any(|w| w.contains("missing-service")),
+            "Expected warning about missing service"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("HTTP method")),
+            "Expected warning about missing HTTP method"
+        );
 
         // Test with incompatible version
         let incompatible_config = json!({
@@ -574,9 +707,144 @@ mod tests {
             &available_services,
         );
 
-        // Validation should succeed with warning for minor version incompatibility
+        // Validation should succeed with warnings for minor version incompatibility
+        // and REST endpoint without HTTP method
         assert!(result.is_ok(), "Validation failed: {:?}", result);
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("Minor schema version incompatibility"));
+        assert_eq!(warnings.len(), 3);
+        // Verify we have the expected warnings
+        assert!(
+            warnings.iter().any(|w| w.contains("minor differences")),
+            "Expected warning about minor version differences"
+        );
+        assert!(
+            warnings.iter().any(|w| w.contains("HTTP method")),
+            "Expected warning about missing HTTP method"
+        );
+    }
+
+    #[test]
+    fn test_service_type_validation() {
+        let mut validator = ValidationService::new();
+
+        // Test REST service without methods
+        let service_name = "test-rest-service";
+        let config = json!({
+            "name": "test-rest-service",
+            "version": "1.0.0",
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                    // Missing method
+                }
+            ]
+        });
+
+        let (result, warnings) =
+            validator.validate_service_with_context(service_name, &config, &HashSet::new());
+
+        // Validation should pass but with warnings
+        assert!(result.is_ok(), "REST service validation failed");
+        assert!(!warnings.is_empty(), "Expected warnings for REST service without methods");
+        assert!(
+            warnings.iter().any(|w| w.contains("HTTP method")),
+            "Expected warning about missing HTTP method"
+        );
+
+        // Test GraphQL service without schema
+        let service_name = "test-graphql-service";
+        let config = json!({
+            "name": "test-graphql-service",
+            "version": "1.0.0",
+            "service_type": {
+                "type": "graphql"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/graphql"
+                }
+            ]
+            // Missing graphql_schema in metadata
+        });
+
+        let (result, warnings) =
+            validator.validate_service_with_context(service_name, &config, &HashSet::new());
+
+        // Validation should pass but with warnings
+        assert!(result.is_ok(), "GraphQL service validation failed");
+        assert!(!warnings.is_empty(), "Expected warnings for GraphQL service without schema");
+        assert!(
+            warnings.iter().any(|w| w.contains("graphql_schema")),
+            "Expected warning about missing GraphQL schema"
+        );
+
+        // Test service with custom type but missing description
+        let service_name = "test-custom-service";
+        let config = json!({
+            "name": "test-custom-service",
+            "version": "1.0.0",
+            "service_type": {
+                "type": "other",
+                "custom_type": "custom-protocol"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                }
+            ]
+            // Missing description
+        });
+
+        let (result, warnings) =
+            validator.validate_service_with_context(service_name, &config, &HashSet::new());
+
+        // Validation should pass but with warnings
+        assert!(result.is_ok(), "Custom service validation failed");
+        assert!(!warnings.is_empty(), "Expected warnings for custom service without description");
+        assert!(
+            warnings.iter().any(|w| w.contains("description")),
+            "Expected warning about missing description for custom service type"
+        );
+    }
+
+    #[test]
+    fn test_version_compatibility_warnings() {
+        let mut validator = ValidationService::new();
+
+        // Configure a different current version to test minor incompatibility
+        let service_name = "test-version-service";
+        let config = json!({
+            "name": "test-version-service",
+            "schema_version": "1.1.0", // Minor version difference
+            "version": "1.0.0",
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api",
+                    "method": "GET"
+                }
+            ]
+        });
+
+        // The constant CURRENT_SCHEMA_VERSION is "1.0.0"
+
+        let (result, warnings) =
+            validator.validate_service_with_context(service_name, &config, &HashSet::new());
+
+        // Validation should pass with minor version incompatibility warnings
+        assert!(result.is_ok(), "Version compatibility validation failed");
+        assert!(!warnings.is_empty(), "Expected warnings for minor version incompatibility");
+        assert!(
+            warnings.iter().any(|w| w.contains("minor differences")),
+            "Expected warning about minor version differences"
+        );
     }
 }

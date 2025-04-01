@@ -26,3 +26,6 @@ Thumbs.db
 # Act (GitHub Actions local testing)
 .act/.secrets
 .act/.github_token
+
+# Ignore wiki repository
+aureacore.wiki/
