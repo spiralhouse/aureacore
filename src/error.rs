@@ -19,6 +19,10 @@ pub enum AureaCoreError {
     IncompatibleVersion(String),
     /// Feature not implemented
     NotImplemented(String),
+    /// Internal error
+    Internal(String),
+    /// Circular dependency detected
+    CircularDependency(String),
     // We'll add more error types as we implement more features
 }
 
@@ -35,6 +39,8 @@ impl fmt::Display for AureaCoreError {
             }
             AureaCoreError::IncompatibleVersion(msg) => write!(f, "Incompatible version: {}", msg),
             AureaCoreError::NotImplemented(msg) => write!(f, "Not implemented: {}", msg),
+            AureaCoreError::Internal(msg) => write!(f, "Internal error: {}", msg),
+            AureaCoreError::CircularDependency(msg) => write!(f, "Circular dependency: {}", msg),
         }
     }
 }
