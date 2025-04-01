@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use std::process;
 
-use aureacore::{ServiceRegistry, ValidationSummary};
+use aureacore::registry::{ServiceRegistry, ValidationSummary};
 use clap::{Parser, Subcommand};
 use tracing::{error, info};
 

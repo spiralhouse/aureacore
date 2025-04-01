@@ -6,10 +6,10 @@ mod store;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-// Temporarily comment out the dependency imports until the module is properly implemented
-// pub use dependency::{
-//     CycleInfo, DependencyGraph, DependencyManager, DependencyResolver, EdgeMetadata,
-// };
+// Uncomment the dependency imports since we've implemented the module
+pub use dependency::{
+    CycleInfo, DependencyGraph, DependencyManager, DependencyResolver, EdgeMetadata,
+};
 pub use service::{Service, ServiceConfig, ServiceState, ServiceStatus};
 
 use crate::error::{AureaCoreError, Result};
