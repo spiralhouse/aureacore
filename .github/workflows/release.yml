@@ -40,6 +40,7 @@ jobs:
           skip-version-file: 'false'
           skip-on-empty: 'false'
           skip-commit: 'true'
+          skip-tag: 'true'
 
   release:
     needs: check-release
