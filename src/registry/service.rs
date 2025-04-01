@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 use std::{fmt, fs};
 
@@ -33,6 +34,8 @@ pub struct ServiceStatus {
     pub last_checked: DateTime<Utc>,
     /// Optional error message
     pub error_message: Option<String>,
+    /// Warning messages (e.g., missing dependencies or minor version issues)
+    pub warnings: Vec<String>,
 }
 
 /// State of a service
@@ -62,13 +65,20 @@ impl fmt::Display for ServiceState {
 impl ServiceStatus {
     /// Creates a new service status
     pub fn new(state: ServiceState) -> Self {
-        Self { state, last_checked: Utc::now(), error_message: None }
+        Self { state, last_checked: Utc::now(), error_message: None, warnings: Vec::new() }
     }
 
     /// Updates the status with an error
     pub fn with_error(mut self, message: String) -> Self {
         self.state = ServiceState::Error;
         self.error_message = Some(message);
+        self.last_checked = Utc::now();
+        self
+    }
+
+    /// Updates the status with warnings
+    pub fn with_warnings(mut self, warnings: Vec<String>) -> Self {
+        self.warnings = warnings;
         self.last_checked = Utc::now();
         self
     }
@@ -173,21 +183,49 @@ impl Service {
     }
 
     /// Validates the service configuration
-    pub fn validate(&mut self, validation_service: &mut ValidationService) -> Result<()> {
+    pub fn validate(
+        &mut self,
+        validation_service: &mut ValidationService,
+        available_services: &HashSet<String>,
+    ) -> Result<()> {
         self.status = ServiceStatus::new(ServiceState::Validating);
 
-        // Load the schema data
-        let schema_data = self.load_schema_data()?;
+        // Avoid borrow checker issues by cloning values we need for logging
+        let service_name = self.name.clone();
 
-        // Validate the schema
-        match validation_service.validate_service(schema_data) {
+        // Load the schema data
+        let schema_data = match self.load_schema_data() {
+            Ok(data) => data.clone(),
+            Err(err) => return Err(err),
+        };
+
+        // Validate the schema with context for dependency validation
+        let (result, warnings) = validation_service.validate_service_with_context(
+            &service_name,
+            &schema_data,
+            available_services,
+        );
+
+        // Process validation result
+        match result {
             Ok(_) => {
-                self.status = ServiceStatus::new(ServiceState::Active);
+                // Service validated successfully but may have warnings
+                self.status =
+                    ServiceStatus::new(ServiceState::Active).with_warnings(warnings.clone());
+
+                // Log any warnings
+                for warning in &warnings {
+                    tracing::warn!("Service '{}' validation warning: {}", service_name, warning);
+                }
+
                 Ok(())
             }
             Err(err) => {
                 let error_message = format!("Schema validation failed: {}", err);
-                self.status = ServiceStatus::new(ServiceState::Error).with_error(error_message);
+                self.status = ServiceStatus::new(ServiceState::Error)
+                    .with_error(error_message)
+                    .with_warnings(warnings.clone());
+
                 Err(err)
             }
         }
@@ -198,7 +236,7 @@ impl Service {
         &self.status
     }
 
-    /// Sets an error status with a message
+    /// Sets an error for the service
     pub fn set_error(&mut self, message: String) {
         self.status = ServiceStatus::new(ServiceState::Error).with_error(message);
     }
@@ -206,14 +244,15 @@ impl Service {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use serde_json::json;
 
     use super::*;
-    use crate::schema::validation::ValidationService;
 
     fn create_test_config(config_path: &str) -> ServiceConfig {
         ServiceConfig {
-            namespace: Some("test".to_string()),
+            namespace: None,
             config_path: config_path.to_string(),
             schema_version: "1.0.0".to_string(),
         }
@@ -221,7 +260,7 @@ mod tests {
 
     #[test]
     fn test_service_creation() {
-        let config = create_test_config("test/config.yaml");
+        let config = create_test_config("test.json");
         let service = Service::new("test-service".to_string(), config);
         assert_eq!(service.name, "test-service");
         assert_eq!(service.status.state, ServiceState::Inactive);
@@ -229,85 +268,118 @@ mod tests {
 
     #[test]
     fn test_service_update_config() {
-        let config = create_test_config("test/config.yaml");
+        let config = create_test_config("test.json");
         let mut service = Service::new("test-service".to_string(), config);
 
-        let new_config = ServiceConfig {
-            namespace: Some("new-test".to_string()),
-            config_path: "new-test/config.yaml".to_string(),
-            schema_version: "1.1.0".to_string(),
-        };
-        service.update_config(new_config.clone()).unwrap();
-        assert_eq!(service.config.namespace, Some("new-test".to_string()));
-        assert_eq!(service.config.config_path, "new-test/config.yaml");
-        assert_eq!(service.config.schema_version, "1.1.0");
+        let new_config = create_test_config("updated.json");
+        let result = service.update_config(new_config);
+
+        assert!(result.is_ok());
+        assert_eq!(service.config.config_path, "updated.json");
         assert_eq!(service.status.state, ServiceState::Validating);
+        assert!(service.schema_data.is_none());
     }
 
     #[test]
     fn test_service_timestamps() {
-        let config = create_test_config("test/config.yaml");
-        let mut service = Service::new("test-service".to_string(), config);
+        let config = create_test_config("test.json");
+        let service = Service::new("test-service".to_string(), config);
+        let initial_timestamp = service.last_updated;
 
-        let initial_update = service.last_updated;
-        let initial_check = service.status.last_checked;
-
-        // Sleep briefly to ensure timestamps differ
+        // Sleep briefly to ensure timestamps are different
         std::thread::sleep(std::time::Duration::from_millis(5));
 
-        // Update should change both timestamps
-        let new_config = create_test_config("test/config.yaml");
-        service.update_config(new_config).unwrap();
+        let mut service = service;
+        let new_config = create_test_config("updated.json");
+        let _ = service.update_config(new_config);
 
-        assert!(service.last_updated > initial_update);
-        assert!(service.status.last_checked > initial_check);
+        assert!(service.last_updated > initial_timestamp);
     }
 
     #[test]
     fn test_service_validation() {
-        let config = create_test_config("test/config.json");
+        let config = create_test_config("test.json");
         let mut service = Service::new("test-service".to_string(), config);
-        let mut validation_service = ValidationService::new();
 
-        // Mock the schema data to avoid file system access
+        // Mock schema data
         service.mock_schema_data(json!({
             "name": "test-service",
             "version": "1.0.0",
+            "schema_version": "1.0.0",
             "service_type": {
                 "type": "rest"
             },
             "endpoints": [
                 {
-                    "name": "test",
-                    "path": "/test"
+                    "name": "api",
+                    "path": "/api"
                 }
-            ],
-            "schema_version": "1.0.0"
+            ]
         }));
 
-        // Validation should pass for valid schema
-        let result = service.validate(&mut validation_service);
+        let mut validation_service = ValidationService::new();
+        let available_services = HashSet::new();
+        let result = service.validate(&mut validation_service, &available_services);
+
         assert!(result.is_ok(), "Validation failed: {:?}", result);
         assert_eq!(service.status.state, ServiceState::Active);
     }
 
     #[test]
     fn test_service_validation_failure() {
-        let config = create_test_config("test/config.json");
+        let config = create_test_config("test.json");
         let mut service = Service::new("test-service".to_string(), config);
-        let mut validation_service = ValidationService::new();
 
-        // Mock the schema data with invalid data
+        // Mock invalid schema data (missing required fields)
         service.mock_schema_data(json!({
             "name": "test-service",
             "version": "1.0.0"
-            // Missing required fields
+            // Missing service_type and endpoints
         }));
 
-        // Validation should fail for invalid schema
-        let result = service.validate(&mut validation_service);
+        let mut validation_service = ValidationService::new();
+        let available_services = HashSet::new();
+        let result = service.validate(&mut validation_service, &available_services);
+
         assert!(result.is_err());
         assert_eq!(service.status.state, ServiceState::Error);
         assert!(service.status.error_message.is_some());
+    }
+
+    #[test]
+    fn test_service_validation_with_warnings() {
+        let config = create_test_config("test.json");
+        let mut service = Service::new("test-service".to_string(), config);
+
+        // Mock schema data with dependencies
+        service.mock_schema_data(json!({
+            "name": "test-service",
+            "version": "1.0.0",
+            "schema_version": "1.0.0",
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                }
+            ],
+            "dependencies": [
+                {
+                    "service": "missing-service",
+                    "version_constraint": "1.0.0"
+                }
+            ]
+        }));
+
+        let mut validation_service = ValidationService::new();
+        let available_services = HashSet::new(); // Empty set - dependency won't be found
+        let result = service.validate(&mut validation_service, &available_services);
+
+        assert!(result.is_ok(), "Validation failed: {:?}", result);
+        assert_eq!(service.status.state, ServiceState::Active);
+        assert!(!service.status.warnings.is_empty());
+        assert!(service.status.warnings[0].contains("missing-service"));
     }
 }

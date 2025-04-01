@@ -94,8 +94,10 @@ fn display_validation_summary(summary: &ValidationSummary) {
 
     if !summary.warnings.is_empty() {
         println!("\nWarnings:");
-        for (service, warning) in &summary.warnings {
-            println!("  ⚠️  {}: {}", service, warning);
+        for (service, warnings) in &summary.warnings {
+            for warning in warnings {
+                println!("  ⚠️  {}: {}", service, warning);
+            }
         }
     }
 
@@ -175,6 +177,7 @@ mod tests {
         summary.successful.push("service1".to_string());
         summary.successful.push("service2".to_string());
         summary.failed.push(("service3".to_string(), "error".to_string()));
+        summary.add_warning("service1".to_string(), "minor warning".to_string());
 
         display_validation_summary(&summary);
     }
