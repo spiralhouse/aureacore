@@ -1,0 +1,12 @@
+{
+    "repository": {
+        "name": "aureacore",
+        "full_name": "spiralhouse/aureacore",
+        "owner": {
+            "login": "spiralhouse"
+        }
+    },
+    "workflow_run": {
+        "conclusion": "success"
+    }
+}
