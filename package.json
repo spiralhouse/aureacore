@@ -1,6 +1,24 @@
 {
   "name": "aureacore",
-  "version": "0.1.0",
+  "version": "0.5.0",
+  "description": "Service Registry and Configuration Management",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spiralhouse/aureacore.git"
+  },
+  "license": "Apache-2.0 WITH Commons-Clause",
+  "bugs": {
+    "url": "https://github.com/spiralhouse/aureacore/issues"
+  },
+  "homepage": "https://github.com/spiralhouse/aureacore#readme",
+  "conventional-changelog": {
+    "preset": "angular",
+    "releaseCount": 0,
+    "outputUnreleased": true,
+    "appendGitLog": true,
+    "mergePattern": true,
+    "tagPrefix": "v"
+  },
   "private": true,
   "scripts": {
     "prepare": "husky",

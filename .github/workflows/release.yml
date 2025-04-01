@@ -15,6 +15,7 @@ jobs:
     outputs:
       should_release: ${{ steps.conventional-commits-release.outputs.release }}
       next_version: ${{ steps.conventional-commits-release.outputs.version }}
+      changelog: ${{ steps.conventional-commits-release.outputs.clean_changelog }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +29,13 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
       
+      - name: Debug git history and tags
+        run: |
+          echo "Git tags:"
+          git tag -l --sort=-v:refname
+          echo "Latest 10 commits:"
+          git log -n 10 --pretty=format:"%h %s"
+      
       - name: Check conventional commits for release
         id: conventional-commits-release
         uses: TriPSs/conventional-changelog-action@v3
@@ -36,10 +44,18 @@ jobs:
           git-message: 'chore(release): {version}'
           preset: 'angular'
           tag-prefix: 'v'
-          output-file: 'CHANGELOG.md'
-          skip-version-file: 'false'
+          output-file: false
+          skip-version-file: 'true'
           skip-on-empty: 'false'
           skip-commit: 'true'
+          skip-tag: 'true'
+          
+      - name: Display release information
+        if: steps.conventional-commits-release.outputs.release == 'true'
+        run: |
+          echo "New version will be: ${{ steps.conventional-commits-release.outputs.version }}"
+          echo "Clean changelog:"
+          echo "${{ steps.conventional-commits-release.outputs.clean_changelog }}"
 
   release:
     needs: check-release
@@ -56,6 +72,11 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
       
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -63,29 +84,50 @@ jobs:
           
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+      
+      - name: Debug git history and tags
+        run: |
+          echo "Git tags:"
+          git tag -l --sort=-v:refname
+          echo "Latest 10 commits:"
+          git log -n 10 --pretty=format:"%h %s"
+          echo "Conventional commits since latest tag:"
+          git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%h %s" | grep -E '^[a-f0-9]+ (feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z-]+\))?: .+'
           
       - name: Install cargo-release
         run: cargo install --locked cargo-release || cargo install cargo-release --version 0.24.10
+       
+      - name: Display current CHANGELOG.md content
+        run: cat CHANGELOG.md
       
-      - name: Update CHANGELOG and version
-        id: changelog
-        uses: TriPSs/conventional-changelog-action@v3
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          git-message: 'chore(release): {version}'
-          preset: 'angular'
-          tag-prefix: 'v'
-          output-file: 'CHANGELOG.md'
-          skip-version-file: 'false'
-          skip-on-empty: 'false'
-          skip-commit: 'false'
+      - name: Update package.json version
+        run: |
+          npm version ${{ needs.check-release.outputs.next_version }} --no-git-tag-version
           
+      - name: Update CHANGELOG.md
+        run: |
+          node .github/scripts/update-changelog.js ${{ needs.check-release.outputs.next_version }} "${{ needs.check-release.outputs.changelog }}"
+      
+      - name: Display updated CHANGELOG.md content
+        run: cat CHANGELOG.md
+      
+      - name: Commit changes
+        run: |
+          git add CHANGELOG.md package.json
+          git commit -m "chore(release): v${{ needs.check-release.outputs.next_version }}"
+      
+      - name: Create Version Tag
+        run: |
+          git tag -a v${{ needs.check-release.outputs.next_version }} -m "Release v${{ needs.check-release.outputs.next_version }}"
+          git push origin main --tags
+          git push origin main
+            
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.changelog.outputs.version }}
-          name: Release v${{ steps.changelog.outputs.version }}
-          body: ${{ steps.changelog.outputs.clean_changelog }}
+          tag_name: v${{ needs.check-release.outputs.next_version }}
+          name: Release v${{ needs.check-release.outputs.next_version }}
+          body: ${{ needs.check-release.outputs.changelog }}
           draft: false
           prerelease: false
         env:
