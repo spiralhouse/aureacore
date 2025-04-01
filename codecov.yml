@@ -13,12 +13,32 @@ coverage:
         target: auto
         threshold: 1%
         base: auto
+      unit:
+        flags:
+          - unit
+        paths:
+          - "src/"
+      integration:
+        flags:
+          - integration
+        paths:
+          - "tests/"
     patch:
       default:
         # basic
         target: 50%
         threshold: 1%
         base: auto
+
+flags:
+  unit:
+    paths:
+      - src/
+    carryforward: true
+  integration:
+    paths:
+      - tests/
+    carryforward: true
 
 ignore:
   # Ignore import statements in main.rs (lines 1-7)
