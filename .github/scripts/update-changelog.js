@@ -14,63 +14,72 @@ if (!newVersion || !cleanChangelog) {
 
 const changelogPath = path.join(process.cwd(), 'CHANGELOG.md');
 
-// Read the existing CHANGELOG.md
-let existingChangelog = '';
-try {
-    existingChangelog = fs.readFileSync(changelogPath, 'utf8');
-} catch (error) {
-    console.error('Error reading CHANGELOG.md:', error);
-    process.exit(1);
+function updateChangelog(filePath, newVersion, changelogContent) {
+    try {
+        const today = new Date();
+        const formattedDate = today.toISOString().split('T')[0];
+
+        console.log(`Updating ${filePath} for version ${newVersion}`);
+        console.log(`Using changelog content:\n${changelogContent}`);
+
+        // Read the current changelog
+        const changelog = fs.readFileSync(filePath, 'utf8');
+
+        // Process the changelogContent to handle escaped newlines
+        const processedChangelog = changelogContent.replace(/\\n/g, '\n');
+
+        // Find the unreleased section
+        const unreleasedRegex = /## \[Unreleased\].*?\n(.*?)(?=\n## \[|$)/s;
+        const match = changelog.match(unreleasedRegex);
+
+        if (!match) {
+            console.error('Could not find Unreleased section in CHANGELOG.md');
+            process.exit(1);
+        }
+
+        // Clean up the unreleased section, keeping the structure but removing content
+        const unreleasedContent = match[1];
+        const cleanedUnreleasedContent = unreleasedContent
+            .replace(/### (Added|Changed|Fixed|Deprecated|Removed|Security)([\s\S]*?)(?=### |$)/g, (_, title) => {
+                return `### ${title}\n- \n\n`;
+            })
+            .trim() + '\n\n';
+
+        // Create the new version entry
+        const versionWithPrefix = newVersion.startsWith('v') ? newVersion : `v${newVersion}`;
+        const newVersionEntry = `## [${versionWithPrefix}] - ${formattedDate}\n\n${processedChangelog}\n\n`;
+
+        // Replace the current changelog with the new version and cleaned unreleased section
+        const updatedChangelog = changelog.replace(
+            unreleasedRegex,
+            `## [Unreleased] - ReleaseDate\n${cleanedUnreleasedContent}${newVersionEntry}`
+        );
+
+        // Write the updated changelog back to the file
+        fs.writeFileSync(filePath, updatedChangelog);
+        console.log(`Successfully updated ${filePath} for version ${versionWithPrefix}`);
+        return true;
+    } catch (error) {
+        console.error(`Error updating changelog: ${error.message}`);
+        return false;
+    }
 }
 
-// Parse the existing CHANGELOG to extract the unreleased section
-const unreleasedRegex = /## \[Unreleased\][\s\S]*?(?=## \[v|$)/;
-const unreleasedMatch = existingChangelog.match(unreleasedRegex);
-
-if (!unreleasedMatch) {
-    console.error('Could not find Unreleased section in CHANGELOG.md');
-    process.exit(1);
-}
-
-// Get the current date in YYYY-MM-DD format
-const currentDate = new Date().toISOString().split('T')[0];
-
-// Create the new version section
-const newVersionSection = `## [v${newVersion}] - ${currentDate}\n\n${cleanChangelog}`;
-
-// Update the changelog
-// 1. Keep the header (everything before Unreleased)
-// 2. Add an empty Unreleased section
-// 3. Add the new version section
-// 4. Include all previous versions
-const headerRegex = /([\s\S]*?)## \[Unreleased\]/;
-const headerMatch = existingChangelog.match(headerRegex);
-const header = headerMatch ? headerMatch[1] : '';
-
-const previousVersionsRegex = /## \[v.*?\][\s\S]*/;
-const previousVersionsMatch = existingChangelog.match(previousVersionsRegex);
-const previousVersions = previousVersionsMatch ? previousVersionsMatch[0] : '';
-
-const updatedChangelog = `${header}## [Unreleased] - ReleaseDate
-
-### Added
-- 
-
-### Changed
-- 
-
-### Fixed
-- 
-
-${newVersionSection}
-
-${previousVersions}`;
-
-// Write the updated CHANGELOG.md
 try {
-    fs.writeFileSync(changelogPath, updatedChangelog);
-    console.log(`Successfully updated CHANGELOG.md for version v${newVersion}`);
+    // Validate the version format
+    const versionRegex = /^v?\d+\.\d+\.\d+$/;
+    if (!versionRegex.test(newVersion)) {
+        console.error(`Invalid version format: ${newVersion}. Expected format: [v]x.y.z`);
+        process.exit(1);
+    }
+
+    // Call the updateChangelog function with the provided parameters
+    const success = updateChangelog(changelogPath, newVersion, cleanChangelog);
+
+    if (!success) {
+        process.exit(1);
+    }
 } catch (error) {
-    console.error('Error writing to CHANGELOG.md:', error);
+    console.error(`Error: ${error.message}`);
     process.exit(1);
 } 
