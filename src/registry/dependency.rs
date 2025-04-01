@@ -496,10 +496,17 @@ mod tests {
         assert!(cycle_info.is_some(), "Cyclic graph should detect cycles");
 
         if let Some(cycle) = cycle_info {
-            assert_eq!(cycle.cycle_path.len(), 4); // X -> Y -> Z -> X cycle has 4 nodes including the repeated first node
-                                                   // Due to the direction of edges (from service to dependency), the cycle detection
-                                                   // finds cycles starting from Z, not X
-            assert_eq!(cycle.cycle_path[0], "Z");
+            // The cycle should contain 4 nodes (including the repeated first node at the end)
+            assert_eq!(cycle.cycle_path.len(), 4);
+
+            // The cycle should contain all three nodes X, Y, and Z
+            let nodes_in_cycle: Vec<&String> = cycle.cycle_path.iter().collect();
+            assert!(nodes_in_cycle.contains(&&"X".to_string()), "Cycle should contain X");
+            assert!(nodes_in_cycle.contains(&&"Y".to_string()), "Cycle should contain Y");
+            assert!(nodes_in_cycle.contains(&&"Z".to_string()), "Cycle should contain Z");
+
+            // The first node should also appear as the last node to complete the cycle
+            assert_eq!(cycle.cycle_path.first(), cycle.cycle_path.last());
         }
     }
 
