@@ -496,8 +496,10 @@ mod tests {
         assert!(cycle_info.is_some(), "Cyclic graph should detect cycles");
 
         if let Some(cycle) = cycle_info {
-            assert_eq!(cycle.cycle_path.len(), 4); // X -> Y -> Z -> X
-            assert_eq!(cycle.cycle_path[0], "Z"); // First node in cycle - can be any node in the cycle
+            assert_eq!(cycle.cycle_path.len(), 4); // X -> Y -> Z -> X cycle has 4 nodes including the repeated first node
+                                                   // Due to the direction of edges (from service to dependency), the cycle detection
+                                                   // finds cycles starting from Z, not X
+            assert_eq!(cycle.cycle_path[0], "Z");
         }
     }
 
