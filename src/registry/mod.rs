@@ -3,8 +3,9 @@ mod git;
 mod service;
 mod store;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 // Uncomment the dependency imports since we've implemented the module
 pub use dependency::{
@@ -126,7 +127,169 @@ impl ServiceRegistry {
         let service_names: std::collections::HashSet<String> =
             self.services.keys().cloned().collect();
 
-        for (name, service) in &mut self.services {
+        // First, build a dependency graph for circular dependency detection
+        let mut dep_graph = DependencyGraph::new();
+
+        // Add all services to the graph
+        for service_name in self.services.keys() {
+            dep_graph.add_node(service_name.clone());
+        }
+
+        // Add dependencies as edges
+        for (service_name, service) in &self.services {
+            if let Some(dependencies) = &service.config.dependencies {
+                for dependency in dependencies {
+                    if self.services.contains_key(&dependency.service) {
+                        let metadata = EdgeMetadata {
+                            required: dependency.required,
+                            version_constraint: dependency.version_constraint.clone(),
+                        };
+                        dep_graph.add_edge(
+                            service_name.clone(),
+                            dependency.service.clone(),
+                            metadata,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Check for circular dependencies
+        if let Some(cycle) = dep_graph.detect_cycles() {
+            tracing::warn!("Circular dependency detected: {}", cycle.description);
+            summary.add_warning(
+                "system".to_string(),
+                format!("Circular dependency detected: {}", cycle.description),
+            );
+        }
+
+        // First pass: Collect information about dependencies and validation issues
+        let mut dependency_warnings = HashMap::new();
+        let mut services_with_errors = Vec::new();
+
+        for (service_name, service) in &self.services {
+            let mut service_warnings = Vec::new();
+            let mut has_critical_error = false;
+            let mut error_message = String::new();
+
+            if let Some(dependencies) = &service.config.dependencies {
+                for dep in dependencies {
+                    let dep_name = &dep.service;
+
+                    // Check if dependency exists
+                    if let Some(dep_service) = self.services.get(dep_name) {
+                        // Skip version check if no constraint provided
+                        if let Some(version_constraint) = &dep.version_constraint {
+                            // Check version compatibility if schema data is available
+                            if let Some(schema) = &dep_service.schema_data {
+                                if let Some(version) =
+                                    schema.get("version").and_then(|v| v.as_str())
+                                {
+                                    let compatibility = self
+                                        .validation_service
+                                        .check_version_compatibility(version, version_constraint);
+
+                                    match compatibility {
+                                        crate::schema::validation::VersionCompatibility::Compatible => {
+                                            // Compatible - no warning needed
+                                        },
+                                        crate::schema::validation::VersionCompatibility::MinorIncompatible => {
+                                            // Add a warning for minor incompatibility
+                                            service_warnings.push(format!(
+                                                "Minor version incompatibility for dependency '{}': expected {} but found {}",
+                                                dep_name, version_constraint, version
+                                            ));
+                                        },
+                                        crate::schema::validation::VersionCompatibility::MajorIncompatible => {
+                                            let msg = format!(
+                                                "Major version incompatibility for dependency '{}': expected {} but found {}",
+                                                dep_name, version_constraint, version
+                                            );
+                                            if dep.required {
+                                                // Critical error for required dependency
+                                                has_critical_error = true;
+                                                error_message = msg.clone();
+                                                summary.failed.push((service_name.clone(), msg));
+                                            } else {
+                                                // Warning for optional dependency
+                                                service_warnings.push(format!(
+                                                    "Optional dependency '{}' has incompatible version: {}",
+                                                    dep_name, msg
+                                                ));
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    service_warnings.push(format!(
+                                        "Dependency '{}' has missing or invalid version in schema",
+                                        dep_name
+                                    ));
+                                }
+                            } else {
+                                service_warnings.push(format!(
+                                    "Dependency '{}' has no schema data loaded",
+                                    dep_name
+                                ));
+                            }
+                        }
+                    } else {
+                        // Dependency not found
+                        if dep.required {
+                            let msg = format!("Required dependency '{}' not found", dep_name);
+                            has_critical_error = true;
+                            error_message = msg.clone();
+                            summary.failed.push((service_name.clone(), msg));
+                        } else {
+                            service_warnings
+                                .push(format!("Optional dependency '{}' not found", dep_name));
+                        }
+                    }
+                }
+            }
+
+            // Add warnings for this service if any
+            if !service_warnings.is_empty() {
+                dependency_warnings.insert(service_name.clone(), service_warnings);
+            }
+
+            // Collect services with critical errors for status updates
+            if has_critical_error {
+                services_with_errors.push((service_name.clone(), error_message));
+            }
+        }
+
+        // Update service statuses for services with errors (after the immutable borrow is done)
+        for (service_name, error_message) in &services_with_errors {
+            if let Some(service) = self.services.get_mut(service_name) {
+                service.status =
+                    ServiceStatus::new(ServiceState::Error).with_error(error_message.clone());
+            }
+        }
+
+        // Create a HashSet of service names with errors for quick lookups
+        let services_with_errors_set: HashSet<String> =
+            services_with_errors.iter().map(|(name, _)| name.clone()).collect();
+
+        // Merge dependency warnings into the summary
+        for (service_name, warnings) in dependency_warnings {
+            for warning in warnings {
+                summary.add_warning(service_name.clone(), warning);
+            }
+        }
+
+        // Second pass: Validate individual service configurations
+        let service_names_vec: Vec<String> = self.services.keys().cloned().collect();
+        for name in service_names_vec {
+            // Skip services that already failed dependency validation
+            if services_with_errors_set.contains(&name) {
+                continue;
+            }
+
+            let service = match self.services.get_mut(&name) {
+                Some(s) => s,
+                None => continue, // Service might have been removed (unlikely but safe)
+            };
+
             // Check if schema data is loaded
             if service.schema_data.is_none() {
                 service.load_schema_data()?;
@@ -135,7 +298,7 @@ impl ServiceRegistry {
             if let Some(schema_data) = &service.schema_data {
                 // Use validate_service_with_context to check for dependencies
                 let (result, warnings) = self.validation_service.validate_service_with_context(
-                    name,
+                    &name,
                     schema_data,
                     &service_names,
                 );
