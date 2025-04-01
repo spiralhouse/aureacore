@@ -135,8 +135,15 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379
 
-      - name: Generate coverage report
+      - name: Generate coverage reports
         run: |
+          # Generate unit test coverage
+          grcov . --binary-path ./target/debug/deps/ -s ./src -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o unit-coverage.lcov
+          
+          # Generate integration test coverage
+          grcov . --binary-path ./target/debug/deps/ -s ./tests -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o integration-coverage.lcov
+          
+          # Generate combined coverage for backwards compatibility
           grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
 
       - name: Upload coverage to Codecov
@@ -144,6 +151,7 @@ jobs:
         if: ${{ github.actor != 'dependabot[bot]' }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.lcov
+          files: coverage.lcov,unit-coverage.lcov,integration-coverage.lcov
+          flags: unit,integration
           fail_ci_if_error: true
           verbose: true 

@@ -77,8 +77,8 @@ Current progress:
 - [x] Initial project setup
 - [x] Core architectural decisions
 - [x] Service registry foundation
-- [🔄] Schema validation (in progress)
-- [ ] Dependency management
+- [x] Schema validation
+- [x] Dependency management
 - [ ] UI implementation
 - [ ] Integration interfaces
 
