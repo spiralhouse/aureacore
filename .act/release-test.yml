@@ -1,43 +1,71 @@
 name: Release Test
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
+  push:
     branches:
       - main
 
 jobs:
-  check-release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    outputs:
-      should_release: true
-      next_version: "0.1.1"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Mock version detection
-        id: check
-        run: |
-          echo "Current version: 0.1.0"
-          echo "Next version would be: 0.1.1"
-          echo "should_release=true" >> "$GITHUB_OUTPUT"
-          echo "version=0.1.1" >> "$GITHUB_OUTPUT"
-
-  release:
-    needs: check-release
-    if: ${{ needs.check-release.outputs.should_release == 'true' }}
+  test-changelog:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Mock release process
+      - name: Install dependencies (mock)
         run: |
-          echo "Creating release version ${{ needs.check-release.outputs.next_version }}"
-          echo "Updating CHANGELOG.md"
+          echo "Setting up Node.js environment"
+          echo "This is a mock for testing with act"
 
-      - name: Mock GitHub Release creation
+      - name: Mock conventional changelog check
+        id: conventional-commits
         run: |
-          echo "Creating GitHub Release v${{ needs.check-release.outputs.next_version }}"
+          echo "Mocking conventional changelog check"
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          echo "version=0.6.0" >> "$GITHUB_OUTPUT"
+          echo "## [0.6.0]" > TEST_CHANGELOG.md
+          echo "" >> TEST_CHANGELOG.md
+          echo "### Features" >> TEST_CHANGELOG.md
+          echo "" >> TEST_CHANGELOG.md
+          echo "* **changelog:** improve handling of changelog updates ([debdb5b](https://github.com/spiralhouse/aureacore/commit/debdb5bfb9a4c7d9f2e8a6d3ab76f8b97c2a5e57))" >> TEST_CHANGELOG.md
+
+      - name: Test Node.js script
+        run: |
+          mkdir -p .github/scripts
+          cat > .github/scripts/test-script.js << 'EOL'
+          const fs = require('fs');
+
+          console.log('Reading test changelog');
+          const content = fs.readFileSync('TEST_CHANGELOG.md', 'utf8');
+          console.log('Test changelog content:');
+          console.log(content);
+
+          console.log('Updating test changelog');
+          const updatedContent = `# Changelog\n\n## [Unreleased]\n\n### Added\n- \n\n### Changed\n- \n\n### Fixed\n- \n\n${content}`;
+          fs.writeFileSync('UPDATED_CHANGELOG.md', updatedContent);
+          console.log('Updated changelog written to UPDATED_CHANGELOG.md');
+          EOL
+
+          echo "Running test script:"
+          node .github/scripts/test-script.js
+
+      - name: Display results
+        run: |
+          echo "Should release: ${{ steps.conventional-commits.outputs.release }}"
+          echo "Version: ${{ steps.conventional-commits.outputs.version }}"
+          echo "Test changelog content:"
+          cat TEST_CHANGELOG.md
+
+          if [ -f "UPDATED_CHANGELOG.md" ]; then
+            echo "Updated changelog content:"
+            cat UPDATED_CHANGELOG.md
+          fi
+
+      - name: Debug commit history
+        run: |
+          echo "Latest 10 commits:"
+          git log -n 10 --pretty=format:"%h %s"
+          echo -e "\nConventional commits since latest tag:"
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "HEAD~10")
+          git log $latest_tag..HEAD --pretty=format:"%h %s" | grep -E '^[a-f0-9]+ (feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z-]+\))?: .+' || echo "No conventional commits found"
