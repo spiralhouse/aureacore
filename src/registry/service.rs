@@ -4,9 +4,10 @@ use std::{fmt, fs};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json;
+use {serde_json, tracing};
 
 use crate::error::{AureaCoreError, Result};
+use crate::schema::service::Dependency;
 use crate::schema::validation::ValidationService;
 
 /// Configuration for a service
@@ -19,6 +20,9 @@ pub struct ServiceConfig {
     /// Schema version for validation
     #[serde(default = "default_schema_version")]
     pub schema_version: String,
+    /// Dependencies on other services
+    #[serde(default)]
+    pub dependencies: Option<Vec<Dependency>>,
 }
 
 fn default_schema_version() -> String {
@@ -195,7 +199,23 @@ impl Service {
 
         // Load the schema data
         let schema_data = match self.load_schema_data() {
-            Ok(data) => data.clone(),
+            Ok(data) => {
+                let mut data_value = data.clone();
+
+                // Synchronize dependencies from ServiceConfig to schema_data if present in config
+                if let Some(dependencies) = &self.config.dependencies {
+                    // Create a mutable version of the schema data
+                    if let Some(obj) = data_value.as_object_mut() {
+                        // Convert dependencies to serde_json::Value
+                        let deps_value = serde_json::to_value(dependencies)
+                            .unwrap_or(serde_json::Value::Array(vec![]));
+                        // Update schema data with dependencies
+                        obj.insert("dependencies".to_string(), deps_value);
+                    }
+                }
+
+                data_value
+            }
             Err(err) => return Err(err),
         };
 
@@ -255,6 +275,7 @@ mod tests {
             namespace: None,
             config_path: config_path.to_string(),
             schema_version: "1.0.0".to_string(),
+            dependencies: None,
         }
     }
 
@@ -381,5 +402,45 @@ mod tests {
         assert_eq!(service.status.state, ServiceState::Active);
         assert!(!service.status.warnings.is_empty());
         assert!(service.status.warnings[0].contains("missing-service"));
+    }
+
+    #[test]
+    fn test_service_validation_with_config_dependencies() {
+        use crate::schema::service::Dependency;
+
+        // Create a config with dependencies
+        let mut config = create_test_config("test.json");
+        config.dependencies = Some(vec![Dependency {
+            service: "config-dependency".to_string(),
+            version_constraint: Some("1.0.0".to_string()),
+            required: true,
+        }]);
+
+        let mut service = Service::new("test-service".to_string(), config);
+
+        // Mock basic schema data without dependencies field
+        service.mock_schema_data(json!({
+            "name": "test-service",
+            "version": "1.0.0",
+            "schema_version": "1.0.0",
+            "service_type": {
+                "type": "rest"
+            },
+            "endpoints": [
+                {
+                    "name": "api",
+                    "path": "/api"
+                }
+            ]
+        }));
+
+        let mut validation_service = ValidationService::new();
+        let available_services = HashSet::new(); // Empty set - dependency won't be found
+        let result = service.validate(&mut validation_service, &available_services);
+
+        assert!(result.is_ok(), "Validation failed: {:?}", result);
+        assert_eq!(service.status.state, ServiceState::Active);
+        assert!(!service.status.warnings.is_empty());
+        assert!(service.status.warnings[0].contains("config-dependency"));
     }
 }
