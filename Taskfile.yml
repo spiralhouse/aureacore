@@ -32,19 +32,27 @@ tasks:
       - cargo test --all-features
 
   coverage:
-    desc: Generate code coverage report
+    desc: Generate code coverage reports
     cmds:
-      - rm -f coverage.lcov
+      - rm -f coverage.lcov unit-coverage.lcov integration-coverage.lcov
       - CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage' LLVM_PROFILE_FILE="coverage-%p-%m.profraw" cargo test --all-features
-      - grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
-      - echo "Coverage report generated at coverage.lcov"
+      - |
+        # Generate unit test coverage
+        grcov . --binary-path ./target/debug/deps/ -s ./src -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o unit-coverage.lcov
+
+        # Generate integration test coverage
+        grcov . --binary-path ./target/debug/deps/ -s ./tests -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o integration-coverage.lcov
+
+        # Generate combined coverage for backwards compatibility
+        grcov . --binary-path ./target/debug/deps/ -s . -t lcov --branch --ignore-not-existing --ignore '../*' --ignore "/*" -o coverage.lcov
+      - echo "Coverage reports generated - unit-coverage.lcov, integration-coverage.lcov, coverage.lcov"
 
   clean:
     desc: Clean build artifacts and coverage files
     cmds:
       - cargo clean
       - rm -f coverage*.profraw
-      - rm -f coverage.lcov
+      - rm -f coverage.lcov unit-coverage.lcov integration-coverage.lcov
 
   deps:
     desc: Check dependencies and licenses
