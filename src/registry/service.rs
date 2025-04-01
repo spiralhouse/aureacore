@@ -97,7 +97,7 @@ impl ServiceStatus {
 }
 
 /// Represents a service in the registry
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Service {
     /// Name of the service
     pub name: String,

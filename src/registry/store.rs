@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use crate::error::{AureaCoreError, Result};
 
 /// Manages service configuration storage
+#[derive(Debug, Clone)]
 pub struct ConfigStore {
     /// Base directory for configuration files
     config_dir: PathBuf,

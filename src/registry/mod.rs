@@ -1,3 +1,4 @@
+mod dependency;
 mod git;
 mod service;
 mod store;
@@ -5,6 +6,9 @@ mod store;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+pub use dependency::{
+    CycleInfo, DependencyGraph, DependencyManager, DependencyResolver, EdgeMetadata,
+};
 pub use service::{Service, ServiceConfig, ServiceState, ServiceStatus};
 
 use crate::error::{AureaCoreError, Result};

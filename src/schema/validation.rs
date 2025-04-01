@@ -82,6 +82,7 @@ impl CompiledSchema {
 }
 
 /// Service for validating configuration against schemas
+#[derive(Clone)]
 pub struct ValidationService {
     schema_cache: HashMap<SchemaType, CompiledSchema>,
 }
