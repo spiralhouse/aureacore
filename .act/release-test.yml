@@ -1,43 +1,49 @@
 name: Release Test
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types:
-      - completed
-    branches:
-      - main
+  push:
+    branches: [main]
 
 jobs:
-  check-release:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: ubuntu-latest
-    outputs:
-      should_release: true
-      next_version: "0.1.1"
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Mock version detection
-        id: check
-        run: |
-          echo "Current version: 0.1.0"
-          echo "Next version would be: 0.1.1"
-          echo "should_release=true" >> "$GITHUB_OUTPUT"
-          echo "version=0.1.1" >> "$GITHUB_OUTPUT"
-
-  release:
-    needs: check-release
-    if: ${{ needs.check-release.outputs.should_release == 'true' }}
+  test-changelog:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Mock release process
+      - name: Install dependencies
         run: |
-          echo "Creating release version ${{ needs.check-release.outputs.next_version }}"
-          echo "Updating CHANGELOG.md"
+          echo "Installing dependencies..."
 
-      - name: Mock GitHub Release creation
+      - name: Create test version file
         run: |
-          echo "Creating GitHub Release v${{ needs.check-release.outputs.next_version }}"
+          echo '{"version": "0.0.0"}' > test-version.json
+
+      - name: Check conventional commits for release
+        id: changelog
+        uses: TriPSs/conventional-changelog-action@v3
+        with:
+          github-token: ${{ secrets.github_token }}
+          output-file: "TEST_CHANGELOG.md"
+          skip-version-file: false
+          skip-on-empty: false
+          skip-commit: true
+          version-file: "./test-version.json"
+          git-branch: ${{ github.ref_name }}
+          skip-tag: true
+
+      - name: Display results
+        run: |
+          echo "Should release? ${{ steps.changelog.outputs.skipped == 'false' }}"
+          echo "New version: ${{ steps.changelog.outputs.version }}"
+          echo "Changelog contents:"
+          cat TEST_CHANGELOG.md
+
+      - name: Debug commit history
+        run: |
+          echo "Last 10 commits:"
+          git log -n 10 --oneline
+          echo ""
+          echo "Conventional commits since latest tag:"
+          git log $(git describe --tags --abbrev=0)..HEAD --oneline
