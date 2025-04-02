@@ -3,10 +3,7 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
-use semver::Version;
-
 use crate::error::{AureaCoreError, Result};
-use crate::registry::service::Service;
 use crate::registry::ServiceRegistry;
 use crate::schema::validation::{ValidationService, VersionCompatibility};
 
@@ -569,6 +566,7 @@ mod tests {
     use crate::schema::validation::ValidationService;
 
     // Helper to create a test graph
+    #[allow(dead_code)]
     fn create_test_graph() -> DependencyGraph {
         let mut graph = DependencyGraph::new();
 
@@ -599,6 +597,7 @@ mod tests {
     }
 
     // Helper to create a graph with a cycle
+    #[allow(dead_code)]
     fn create_cycle_graph() -> DependencyGraph {
         let mut graph = DependencyGraph::new();
 
@@ -862,7 +861,7 @@ mod tests {
         use crate::schema::service::Dependency;
 
         // Create registry with a service that has a missing REQUIRED dependency
-        let mut registry = ServiceRegistry::new(
+        let registry = ServiceRegistry::new(
             "test-repo".to_string(),
             "main".to_string(),
             PathBuf::from("/tmp"),

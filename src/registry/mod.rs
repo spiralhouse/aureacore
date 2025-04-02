@@ -5,7 +5,6 @@ mod store;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
 
 // Uncomment the dependency imports since we've implemented the module
 pub use dependency::{

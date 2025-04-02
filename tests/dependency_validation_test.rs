@@ -1,9 +1,7 @@
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::PathBuf;
+use std::collections::HashMap;
 
 use aureacore::error::Result;
-use aureacore::registry::{Service, ServiceRegistry, ServiceState, ServiceStatus};
+use aureacore::registry::{ServiceState, ServiceStatus};
 use aureacore::schema::service::Dependency;
 use serde_json::json;
 
