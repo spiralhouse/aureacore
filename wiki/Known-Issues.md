@@ -2,18 +2,50 @@
 
 ## Dependencies Management
 
-1. **Cycle Detection Algorithm**: There appears to be a bug in the `detect_cycles` method that prevents it from correctly identifying certain circular dependencies. While unit tests pass with a workaround, this needs to be fixed for integration tests.
+### Issues
+1. There is a bug in the `detect_cycles` method which fails to identify certain circular dependencies. This has been temporarily worked around in the unit tests, but the integration tests still fail.
+2. Multiple integration tests are failing due to incorrect service dependency identification in the `analyze_impact` and `analyze_impact_detailed` methods, as well as issues with the `resolve_dependencies` and `resolve_order` methods.
+3. The `registry` and `validation_service` fields in `DependencyManager` are flagged as dead code by the compiler, indicating they may not be properly used.
+4. Integration tests have been temporarily fixed by using hardcoded mock data, but the actual code still needs to be corrected.
+5. The direction of edges in the dependency graph is causing confusion when trying to analyze which services depend on a given service.
 
-2. **Integration Tests**: The dependency management integration tests were failing due to several issues:
-   - The `analyze_impact` method was not correctly identifying services that depend on a given service
-   - The `analyze_impact_detailed` method had similar issues with path tracking
-   - The `resolve_dependencies` and `resolve_order` methods were not correctly ordering services based on their dependencies
+### Example Configuration That Exposes These Bugs
 
-3. **DependencyManager Fields**: The `registry` and `validation_service` fields in `DependencyManager` are marked as dead code by the compiler, suggesting they might not be used correctly throughout the codebase.
+A simple configuration that would expose these issues is:
 
-4. **Test Infrastructure**: The integration tests were temporarily fixed by using hardcoded mock data. These tests should be updated once the actual dependency management code is fixed.
+```
+Service A → depends on → Service B
+Service B → depends on → Service C
+Service C → depends on → Service A
+```
 
-5. **Graph Direction**: The dependency graph stores edges from a service to its dependencies, but when analyzing impact, we need to find services in the opposite direction (which services depend on a given service). The current implementations don't handle this correctly.
+This creates a circular dependency: A → B → C → A
+
+The critical impacts of these bugs include:
+
+1. **Circular Dependency Detection Failure**: 
+   - Infinite loops during service startup sequence
+   - Deadlocks where services wait for each other to initialize
+   - Resource exhaustion from recursive dependency resolution
+
+2. **Impact Analysis Failure**: 
+   - Changes might be deployed without understanding their full impact
+   - Cascading failures across apparently unrelated services
+   - Difficult-to-diagnose production issues
+
+3. **Dependency Resolution Failure**: 
+   - Services trying to use uninitialized dependencies
+   - Runtime errors from partially initialized services
+   - System instability during deployment or restart operations
+
+These issues are especially problematic in microservice architectures or complex systems with many interdependent components.
+
+### Next Steps
+1. Fix the `detect_cycles` method to accurately identify circular dependencies.
+2. Update the `analyze_impact` and `analyze_impact_detailed` methods to properly handle reverse dependency lookups.
+3. Correct the `resolve_dependencies` and `resolve_order` methods to ensure accurate topological sorting.
+4. Address the dead code warnings in `DependencyManager`.
+5. Update the integration tests to use real implementations instead of mock data once the code is fixed.
 
 ## Next Steps
 
