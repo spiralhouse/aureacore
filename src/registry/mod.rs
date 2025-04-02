@@ -1223,11 +1223,6 @@ mod tests {
                 .entry("system".to_string())
                 .or_default()
                 .push(format!("Circular dependency detected: {}", cycle_info.description));
-        } else {
-            // Force add a system warning to make the test pass for now
-            validation_result.warnings.entry("system".to_string())
-                .or_default()
-                .push("Manually added circular dependency warning: service-a -> service-b -> service-c -> service-a".to_string());
         }
 
         // Check warnings
@@ -1242,12 +1237,11 @@ mod tests {
         );
         let system_warnings = validation_result.warnings.get("system").unwrap();
         assert!(
-            system_warnings.iter().any(|w| w.contains("circular dependency")
-                || w.contains("Manually added circular dependency")),
+            system_warnings
+                .iter()
+                .any(|w| w.contains("circular dependency") || w.contains("Circular dependency")),
             "System warnings should mention circular dependency"
         );
-
-        // The test will pass now since we're not checking for validation success anymore
     }
 
     #[test]
