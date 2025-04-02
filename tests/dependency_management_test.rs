@@ -4,7 +4,6 @@ use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use aureacore::error::Result;
-use aureacore::registry::dependency::ImpactInfo;
 use aureacore::registry::{DependencyGraph, DependencyManager, EdgeMetadata, ServiceRegistry};
 use aureacore::schema::validation::ValidationService;
 
@@ -568,6 +567,8 @@ fn test_resolve_order_edge_cases() -> Result<()> {
 #[test]
 fn test_impact_analysis() -> Result<()> {
     let registry = create_test_registry();
+    let validation_service = Arc::new(ValidationService::new());
+    let manager = DependencyManager::new(registry.clone(), validation_service);
 
     // Debug the registry contents
     {
@@ -582,10 +583,9 @@ fn test_impact_analysis() -> Result<()> {
         }
     }
 
-    // MANUALLY create the impact analysis result since the method is not working correctly
     // Test 1: Service A has a required dependency on B
     // So impacting B should impact A
-    let b_impact = vec!["service-a".to_string()];
+    let b_impact = manager.analyze_impact("service-b")?;
 
     println!("B impact: {:?}", b_impact);
     assert_eq!(b_impact.len(), 1);
@@ -593,7 +593,7 @@ fn test_impact_analysis() -> Result<()> {
 
     // Test 2: Service B has a required dependency on D
     // so impacting D should impact B and A
-    let d_impact = vec!["service-b".to_string(), "service-a".to_string()];
+    let d_impact = manager.analyze_impact("service-d")?;
 
     println!("D impact: {:?}", d_impact);
     assert_eq!(d_impact.len(), 2);
@@ -604,57 +604,48 @@ fn test_impact_analysis() -> Result<()> {
 }
 
 #[test]
-fn test_detailed_impact_analysis() {
+fn test_detailed_impact_analysis() -> Result<()> {
     // Create test registry with hyphens in service names
     let registry = create_test_registry();
-    let _validation_service = Arc::new(ValidationService::new());
-    let _manager = DependencyManager::new(registry, _validation_service);
+    let validation_service = Arc::new(ValidationService::new());
+    let manager = DependencyManager::new(registry.clone(), validation_service);
 
-    // MANUALLY create the impact analysis result since the method is not working
-    // This simulates what analyze_impact_detailed should return
-    let impacts = vec![
-        ImpactInfo {
-            service_name: "service-c".to_string(),
-            is_required: false,
-            impact_path: vec!["service-a".to_string(), "service-c".to_string()],
-            description: "Optional dependency chain from 'service-a' to 'service-c'".to_string(),
-        },
-        ImpactInfo {
-            service_name: "service-d".to_string(),
-            is_required: true,
-            impact_path: vec![
-                "service-a".to_string(),
-                "service-b".to_string(),
-                "service-d".to_string(),
-            ],
-            description: "Required dependency chain from 'service-a' to 'service-d'".to_string(),
-        },
-        ImpactInfo {
-            service_name: "service-e".to_string(),
-            is_required: true,
-            impact_path: vec![
-                "service-a".to_string(),
-                "service-b".to_string(),
-                "service-d".to_string(),
-                "service-e".to_string(),
-            ],
-            description: "Required dependency chain from 'service-a' to 'service-e'".to_string(),
-        },
-    ];
+    // Call the analyze_impact_detailed method for service-a
+    let impacts = manager.analyze_impact_detailed("service-a")?;
+    println!("Detailed impact analysis for service-a: {:?}", impacts);
 
-    println!("Detailed impacts: {:?}", impacts);
-    assert_eq!(impacts.len(), 3, "Expected 3 impacted services (C, D, E)");
+    // Check that we have the correct number of impacted services
+    assert_eq!(impacts.len(), 3);
 
-    // Find the impact for service C
-    let service_c_impact = impacts.iter().find(|i| i.service_name == "service-c").unwrap();
+    // Check for service C (optional)
+    let has_c = impacts.iter().any(|info| {
+        info.service_name == "service-c"
+            && !info.is_required
+            && info.impact_path.contains(&"service-a".to_string())
+            && info.impact_path.contains(&"service-c".to_string())
+    });
+    assert!(has_c, "Service C should be included in the impact analysis");
 
-    // Service C should have an impact path from A -> C
-    assert_eq!(service_c_impact.impact_path.len(), 2);
-    assert_eq!(service_c_impact.impact_path[0], "service-a");
-    assert_eq!(service_c_impact.impact_path[1], "service-c");
+    // Check for service D (required)
+    let has_d = impacts.iter().any(|info| {
+        info.service_name == "service-d"
+            && info.is_required
+            && info.impact_path.contains(&"service-a".to_string())
+            && info.impact_path.contains(&"service-b".to_string())
+            && info.impact_path.contains(&"service-d".to_string())
+    });
+    assert!(has_d, "Service D should be included in the impact analysis");
 
-    // The description should mention it's a required dependency
-    assert!(service_c_impact.description.contains("Optional dependency"));
+    // Check for service B (required)
+    let has_b = impacts.iter().any(|info| {
+        info.service_name == "service-b"
+            && info.is_required
+            && info.impact_path.contains(&"service-a".to_string())
+            && info.impact_path.contains(&"service-b".to_string())
+    });
+    assert!(has_b, "Service B should be included in the impact analysis");
+
+    Ok(())
 }
 
 #[test]
@@ -905,6 +896,131 @@ fn test_start_stop_services() -> Result<()> {
     let started = started_services.borrow();
     let stopped = stopped_services.borrow();
     assert_eq!(started.len(), stopped.len());
+
+    Ok(())
+}
+
+#[test]
+fn test_critical_impact_analysis() -> Result<()> {
+    // Create test registry
+    let registry = create_test_registry();
+    let validation_service = Arc::new(ValidationService::new());
+    let manager = DependencyManager::new(registry.clone(), validation_service);
+
+    // Test service-d which should have critical impacts on service-b and service-a
+    // because they have required dependencies on it
+    let critical_impacts = manager.analyze_critical_impact("service-d")?;
+    println!("Critical impacts for service-d: {:?}", critical_impacts);
+
+    // There should be 2 critical services
+    assert_eq!(critical_impacts.len(), 2);
+    assert!(critical_impacts.contains(&"service-b".to_string()));
+    assert!(critical_impacts.contains(&"service-a".to_string()));
+
+    // Test service-c which is an optional dependency
+    // No service should be critically impacted
+    let optional_impacts = manager.analyze_critical_impact("service-c")?;
+    println!("Critical impacts for service-c: {:?}", optional_impacts);
+
+    // There should be 0 critical services since service-c is optional
+    assert_eq!(optional_impacts.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn test_validate_dependencies() -> Result<()> {
+    // Create test registry with services that have dependencies
+    let registry = create_test_registry();
+    let validation_service = Arc::new(ValidationService::new());
+    let manager = DependencyManager::new(registry.clone(), validation_service);
+
+    // Validate service-a's dependencies
+    // It has dependencies on service-b (required) and service-c (optional)
+    let warnings = manager.validate_dependencies("service-a")?;
+    println!("Validation warnings for service-a: {:?}", warnings);
+
+    // There should be no warnings since all dependencies exist
+    assert!(
+        warnings.is_empty() || warnings.get("service-a").map(|w| w.is_empty()).unwrap_or(true),
+        "No warnings expected for service-a"
+    );
+
+    // Validate the service-x which doesn't exist
+    let result = manager.validate_dependencies("nonexistent-service");
+    assert!(result.is_err(), "Expected error for nonexistent service");
+
+    // Validate all dependencies
+    let all_warnings = manager.validate_all_dependencies()?;
+    println!("All validation warnings: {:?}", all_warnings);
+
+    // All dependencies should be valid in our test setup
+    assert!(
+        all_warnings.is_empty() || all_warnings.values().all(|w| w.is_empty()),
+        "No warnings expected for all dependencies"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_dependency_resolver() -> Result<()> {
+    use aureacore::registry::dependency::DependencyResolver;
+
+    // Create a test dependency graph
+    let mut graph = DependencyGraph::new();
+
+    // Add nodes
+    graph.add_node("service-a".to_string());
+    graph.add_node("service-b".to_string());
+    graph.add_node("service-c".to_string());
+
+    // Add edges (a -> b -> c)
+    graph.add_edge(
+        "service-a".to_string(),
+        "service-b".to_string(),
+        EdgeMetadata { required: true, version_constraint: None },
+    );
+
+    graph.add_edge(
+        "service-b".to_string(),
+        "service-c".to_string(),
+        EdgeMetadata { required: true, version_constraint: None },
+    );
+
+    // Create resolver
+    let resolver = DependencyResolver::new();
+
+    // Test find_impact_path
+    let impact_path = resolver.find_impact_path(&graph, "service-c");
+    println!("Impact path for service-c: {:?}", impact_path);
+
+    // Should include service-a and service-b
+    assert!(impact_path.contains(&"service-a".to_string()));
+    assert!(impact_path.contains(&"service-b".to_string()));
+
+    // Test analyze_impact_details
+    let impact_details = resolver.analyze_impact_details(&graph, "service-c");
+    println!("Impact details for service-c: {:?}", impact_details);
+
+    // Should have detailed info for service-a and service-b
+    assert_eq!(impact_details.len(), 2);
+
+    // Test resolve_order
+    let order = resolver.resolve_order(&graph, &["service-a".to_string()])?;
+    println!("Resolution order starting from service-a: {:?}", order);
+
+    // Order should be c -> b -> a (dependencies first)
+    assert!(order.len() >= 3, "Resolution order should include all services");
+
+    // Check the relative positions (earlier in vector means earlier in execution)
+    let pos_a = order.iter().position(|s| s == "service-a").unwrap();
+    let pos_b = order.iter().position(|s| s == "service-b").unwrap();
+    let pos_c = order.iter().position(|s| s == "service-c").unwrap();
+
+    // Dependencies should come before the services that depend on them
+    assert!(pos_c < pos_b, "service-c should come before service-b");
+    assert!(pos_b < pos_a, "service-b should come before service-a");
 
     Ok(())
 }
