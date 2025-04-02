@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
-use aureacore::error::{AureaCoreError, Result};
-use aureacore::registry::dependency::{DependencyResolver, ImpactInfo};
+use aureacore::error::Result;
+use aureacore::registry::dependency::ImpactInfo;
 use aureacore::registry::{DependencyGraph, DependencyManager, EdgeMetadata, ServiceRegistry};
 use aureacore::schema::validation::ValidationService;
 
@@ -98,7 +98,7 @@ fn create_test_registry() -> Rc<RwLock<ServiceRegistry>> {
 #[test]
 fn test_dependency_graph_creation() -> Result<()> {
     let registry = create_test_registry();
-    let validation_service = Arc::new(ValidationService::new());
+    let _validation_service = Arc::new(ValidationService::new());
 
     // Debug logging
     let service_names;
@@ -475,7 +475,7 @@ fn create_complex_registry() -> Rc<RwLock<ServiceRegistry>> {
 
 #[test]
 fn test_complex_dependency_resolution() -> Result<()> {
-    let registry = create_complex_registry();
+    let _registry = create_complex_registry();
 
     // We'll manually simulate the resolution results for service A
     // Service A depends on B, C, and E
@@ -536,12 +536,12 @@ fn test_complex_dependency_resolution() -> Result<()> {
 
 #[test]
 fn test_resolve_order_edge_cases() -> Result<()> {
-    let registry = create_test_registry();
+    let _registry = create_test_registry();
 
     // In this test we bypass the DependencyManager's resolver and test the edge cases directly
 
     // Test 1: Empty array of service names
-    let empty_input: Vec<String> = Vec::new();
+    let _empty_input: Vec<String> = Vec::new();
     let empty_result: Vec<String> = Vec::new();
     println!("Resolved services for empty input: {:?}", empty_result);
 
@@ -607,8 +607,8 @@ fn test_impact_analysis() -> Result<()> {
 fn test_detailed_impact_analysis() {
     // Create test registry with hyphens in service names
     let registry = create_test_registry();
-    let validation_service = Arc::new(ValidationService::new());
-    let manager = DependencyManager::new(registry, validation_service);
+    let _validation_service = Arc::new(ValidationService::new());
+    let _manager = DependencyManager::new(registry, _validation_service);
 
     // MANUALLY create the impact analysis result since the method is not working
     // This simulates what analyze_impact_detailed should return
@@ -658,7 +658,6 @@ fn test_detailed_impact_analysis() {
 }
 
 #[test]
-#[ignore]
 fn test_circular_dependency_detection() -> Result<()> {
     // Create a test registry with circular dependencies
     let temp_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/tests");
@@ -723,23 +722,70 @@ fn test_circular_dependency_detection() -> Result<()> {
         registry.register_service("service-z", config_z).unwrap();
     }
 
-    let validation_service = Arc::new(ValidationService::new());
-    let manager = DependencyManager::new(registry_rc, validation_service);
+    let _validation_service = Arc::new(ValidationService::new());
+    let _manager = DependencyManager::new(registry_rc, _validation_service);
 
+    // Manually build the graph for debugging
+    println!("\n=== Building dependency graph manually for test ===");
+    let mut graph = DependencyGraph::new();
+
+    // Add nodes
+    graph.add_node("service-x".to_string());
+    graph.add_node("service-y".to_string());
+    graph.add_node("service-z".to_string());
+
+    // Add edges to create a cycle: X -> Y -> Z -> X
+    println!("Adding edges: X -> Y -> Z -> X");
+    graph.add_edge(
+        "service-x".to_string(),
+        "service-y".to_string(),
+        EdgeMetadata { required: true, version_constraint: Some("1.0.0".to_string()) },
+    );
+    graph.add_edge(
+        "service-y".to_string(),
+        "service-z".to_string(),
+        EdgeMetadata { required: true, version_constraint: Some("1.0.0".to_string()) },
+    );
+    graph.add_edge(
+        "service-z".to_string(),
+        "service-x".to_string(),
+        EdgeMetadata { required: true, version_constraint: Some("1.0.0".to_string()) },
+    );
+
+    // Print the graph structure
+    println!("Graph structure:");
+    for (node, edges) in &graph.adjacency_list {
+        println!("  {}: {:?}", node, edges.iter().map(|(to, _)| to).collect::<Vec<_>>());
+    }
+
+    // Test cycle detection with our manual graph
+    println!("Running cycle detection on manual graph...");
+    let manual_cycle = graph.detect_cycles();
+    println!("Cycle detection result: {:?}", manual_cycle);
+    assert!(manual_cycle.is_some(), "Cycle detection should find the cycle in our manual graph");
+
+    // Now test with the manager's built graph
+    println!("\n=== Testing with DependencyManager's graph ===");
     // Check for circular dependencies
-    let cycle_info = manager.check_circular_dependencies()?;
-    assert!(cycle_info.is_some());
+    let cycle_info = _manager.check_circular_dependencies()?;
+    println!("Manager's cycle detection result: {:?}", cycle_info);
+    assert!(cycle_info.is_some(), "DependencyManager should detect the cycle");
 
-    let cycle = cycle_info.unwrap();
-    assert!(cycle.cycle_path.len() >= 3);
+    if let Some(cycle) = cycle_info {
+        assert!(cycle.cycle_path.len() >= 3, "Cycle should include at least 3 services");
 
-    // Ensure all three services are in the cycle path
-    assert!(cycle.cycle_path.contains(&"service-x".to_string()));
-    assert!(cycle.cycle_path.contains(&"service-y".to_string()));
-    assert!(cycle.cycle_path.contains(&"service-z".to_string()));
+        // Print cycle path
+        println!("Detected cycle path: {:?}", cycle.cycle_path);
+
+        // Ensure all three services are in the cycle path
+        assert!(cycle.cycle_path.contains(&"service-x".to_string()));
+        assert!(cycle.cycle_path.contains(&"service-y".to_string()));
+        assert!(cycle.cycle_path.contains(&"service-z".to_string()));
+    }
 
     // Attempt to resolve dependencies (should fail due to circular dependency)
-    let resolve_result = manager.resolve_dependencies(&["service-x".to_string()]);
+    let resolve_result = _manager.resolve_dependencies(&["service-x".to_string()]);
+    println!("Resolve result: {:?}", resolve_result);
     assert!(resolve_result.is_err());
 
     Ok(())
@@ -747,7 +793,7 @@ fn test_circular_dependency_detection() -> Result<()> {
 
 #[test]
 fn test_dependency_aware_operations() -> Result<()> {
-    let registry = create_complex_registry();
+    let _registry = create_complex_registry();
 
     // Simulate the expected ordering of services
     // Service A depends on B, C, and E
@@ -814,7 +860,7 @@ fn test_start_stop_services() -> Result<()> {
     };
 
     // Simulated dependency order for service-a
-    let start_names = vec!["service-a".to_string()];
+    let _start_names = vec!["service-a".to_string()];
     let start_order = vec![
         "service-d".to_string(),
         "service-b".to_string(),
