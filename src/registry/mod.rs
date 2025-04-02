@@ -1,4 +1,4 @@
-mod dependency;
+pub mod dependency;
 mod git;
 mod service;
 mod store;
@@ -100,6 +100,13 @@ impl ServiceRegistry {
 
     /// Lists all registered services
     pub fn list_services(&self) -> Result<Vec<String>> {
+        // Return keys from the services HashMap instead of reading from disk
+        // This ensures that only services that have been registered and loaded are returned
+        Ok(self.services.keys().cloned().collect())
+    }
+
+    /// Lists all service configurations from disk
+    pub fn list_config_files(&self) -> Result<Vec<String>> {
         Ok(self
             .config_store
             .list_configs()?
@@ -110,7 +117,7 @@ impl ServiceRegistry {
 
     /// Loads all service configurations from disk
     pub fn load_services(&mut self) -> Result<()> {
-        let service_names = self.list_services()?;
+        let service_names = self.list_config_files()?;
         for name in service_names {
             let config = self.config_store.load_config(&name)?;
             self.register_service(&name, &config)?;
