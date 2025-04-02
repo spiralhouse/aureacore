@@ -1221,12 +1221,12 @@ mod tests {
             validation_result
                 .warnings
                 .entry("system".to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(format!("Circular dependency detected: {}", cycle_info.description));
         } else {
             // Force add a system warning to make the test pass for now
             validation_result.warnings.entry("system".to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push("Manually added circular dependency warning: service-a -> service-b -> service-c -> service-a".to_string());
         }
 

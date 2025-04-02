@@ -154,7 +154,7 @@ fn test_dependency_graph_creation() -> Result<()> {
     // Verify edges
     let a_neighbors = graph
         .adjacency_list
-        .get(&"service-a".to_string())
+        .get("service-a")
         .map(|edges| edges.iter().map(|(to, _)| to).collect::<Vec<_>>())
         .unwrap_or_default();
     println!("Service A neighbors: {:?}", a_neighbors);
@@ -164,7 +164,7 @@ fn test_dependency_graph_creation() -> Result<()> {
 
     let b_neighbors = graph
         .adjacency_list
-        .get(&"service-b".to_string())
+        .get("service-b")
         .map(|edges| edges.iter().map(|(to, _)| to).collect::<Vec<_>>())
         .unwrap_or_default();
     println!("Service B neighbors: {:?}", b_neighbors);
@@ -174,7 +174,7 @@ fn test_dependency_graph_creation() -> Result<()> {
     // Check empty neighbors for leaf nodes
     let c_neighbors = graph
         .adjacency_list
-        .get(&"service-c".to_string())
+        .get("service-c")
         .map(|edges| edges.iter().map(|(to, _)| to).collect::<Vec<_>>())
         .unwrap_or_default();
     println!("Service C neighbors: {:?}", c_neighbors);
@@ -182,7 +182,7 @@ fn test_dependency_graph_creation() -> Result<()> {
 
     let d_neighbors = graph
         .adjacency_list
-        .get(&"service-d".to_string())
+        .get("service-d")
         .map(|edges| edges.iter().map(|(to, _)| to).collect::<Vec<_>>())
         .unwrap_or_default();
     println!("Service D neighbors: {:?}", d_neighbors);
@@ -226,7 +226,7 @@ fn test_dependency_resolution() -> Result<()> {
 
     // Debug the graph structure
     println!("Graph structure:");
-    for (node, edges) in &graph.adjacency_list {
+    for (node, edges) in graph.adjacency_list.iter() {
         println!("  {}: {:?}", node, edges);
     }
 
@@ -239,7 +239,7 @@ fn test_dependency_resolution() -> Result<()> {
     }
 
     // Count incoming edges
-    for (_, edges) in &graph.adjacency_list {
+    for edges in graph.adjacency_list.values() {
         for (to, _) in edges {
             *in_degree.entry(to.clone()).or_insert(0) += 1;
         }
@@ -860,7 +860,7 @@ fn test_start_stop_services() -> Result<()> {
     };
 
     // Simulated dependency order for service-a
-    let _start_names = vec!["service-a".to_string()];
+    let _start_names = ["service-a".to_string()];
     let start_order = vec![
         "service-d".to_string(),
         "service-b".to_string(),
