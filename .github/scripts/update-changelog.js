@@ -14,6 +14,10 @@ if (!newVersion || !cleanChangelog) {
 
 const changelogPath = path.join(process.cwd(), 'CHANGELOG.md');
 
+console.log(`Running changelog update for version ${newVersion}`);
+console.log(`Changelog file path: ${changelogPath}`);
+console.log(`File exists: ${fs.existsSync(changelogPath)}`);
+
 function updateChangelog(filePath, newVersion, changelogContent) {
     try {
         const today = new Date();
@@ -24,6 +28,7 @@ function updateChangelog(filePath, newVersion, changelogContent) {
 
         // Read the current changelog
         const changelog = fs.readFileSync(filePath, 'utf8');
+        console.log(`Current changelog length: ${changelog.length} characters`);
 
         // Process the changelogContent to handle escaped newlines
         const processedChangelog = changelogContent.replace(/\\n/g, '\n');
@@ -34,20 +39,29 @@ function updateChangelog(filePath, newVersion, changelogContent) {
 
         if (!match) {
             console.error('Could not find Unreleased section in CHANGELOG.md');
+            console.log('CHANGELOG content start:', changelog.substring(0, 500));
+            console.log('Searching for pattern:', unreleasedRegex);
             process.exit(1);
         }
 
+        console.log('Found Unreleased section');
+
         // Clean up the unreleased section, keeping the structure but removing content
         const unreleasedContent = match[1];
+        console.log('Unreleased content:', unreleasedContent);
+
         const cleanedUnreleasedContent = unreleasedContent
             .replace(/### (Added|Changed|Fixed|Deprecated|Removed|Security)([\s\S]*?)(?=### |$)/g, (_, title) => {
                 return `### ${title}\n- \n\n`;
             })
             .trim() + '\n\n';
 
+        console.log('Cleaned unreleased content:', cleanedUnreleasedContent);
+
         // Create the new version entry
         const versionWithPrefix = newVersion.startsWith('v') ? newVersion : `v${newVersion}`;
         const newVersionEntry = `## [${versionWithPrefix}] - ${formattedDate}\n\n${processedChangelog}\n\n`;
+        console.log('New version entry:', newVersionEntry);
 
         // Replace the current changelog with the new version and cleaned unreleased section
         const updatedChangelog = changelog.replace(
@@ -55,12 +69,15 @@ function updateChangelog(filePath, newVersion, changelogContent) {
             `## [Unreleased] - ReleaseDate\n${cleanedUnreleasedContent}${newVersionEntry}`
         );
 
+        console.log('Updated changelog length:', updatedChangelog.length);
+
         // Write the updated changelog back to the file
         fs.writeFileSync(filePath, updatedChangelog);
         console.log(`Successfully updated ${filePath} for version ${versionWithPrefix}`);
         return true;
     } catch (error) {
         console.error(`Error updating changelog: ${error.message}`);
+        console.error(error.stack);
         return false;
     }
 }

@@ -8,6 +8,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
 jobs:
   check-release:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -35,6 +41,8 @@ jobs:
           git tag -l --sort=-v:refname
           echo "Latest 10 commits:"
           git log -n 10 --pretty=format:"%h %s"
+          echo "Conventional commits since latest tag:"
+          git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%h %s" | grep -E '^[a-f0-9]+ (feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z-]+\))?: .+'
       
       - name: Check conventional commits for release
         id: conventional-commits-release
@@ -51,11 +59,20 @@ jobs:
           skip-tag: 'true'
           
       - name: Display release information
-        if: steps.conventional-commits-release.outputs.release == 'true'
         run: |
-          echo "New version will be: ${{ steps.conventional-commits-release.outputs.version }}"
-          echo "Clean changelog:"
-          echo "${{ steps.conventional-commits-release.outputs.clean_changelog }}"
+          echo "Release output: ${{ steps.conventional-commits-release.outputs.release }}"
+          echo "Version output: ${{ steps.conventional-commits-release.outputs.version }}"
+          echo "Changelog output available: ${{ steps.conventional-commits-release.outputs.clean_changelog != '' }}"
+          if [ "${{ steps.conventional-commits-release.outputs.release }}" == "true" ]; then
+            echo "New version will be: ${{ steps.conventional-commits-release.outputs.version }}"
+            echo "Clean changelog:"
+            echo "${{ steps.conventional-commits-release.outputs.clean_changelog }}"
+          else
+            echo "No release detected. Debugging info:"
+            echo "Latest tag: $(git describe --tags --abbrev=0)"
+            echo "Commits since tag:"
+            git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:"%h %s"
+          fi
 
   release:
     needs: check-release
@@ -106,21 +123,31 @@ jobs:
           
       - name: Update CHANGELOG.md
         run: |
+          echo "Updating CHANGELOG.md with version: ${{ needs.check-release.outputs.next_version }}"
+          echo "Changelog length: ${#CHANGELOG}"
+          echo "First 100 chars of changelog: ${CHANGELOG:0:100}"
+          ls -la .github/scripts/
+          chmod +x .github/scripts/update-changelog.js
           node .github/scripts/update-changelog.js ${{ needs.check-release.outputs.next_version }} "${{ needs.check-release.outputs.changelog }}"
+        env:
+          CHANGELOG: ${{ needs.check-release.outputs.changelog }}
       
       - name: Display updated CHANGELOG.md content
         run: cat CHANGELOG.md
       
       - name: Commit changes
         run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
           git add CHANGELOG.md package.json
           git commit -m "chore(release): v${{ needs.check-release.outputs.next_version }}"
       
       - name: Create Version Tag
         run: |
           git tag -a v${{ needs.check-release.outputs.next_version }} -m "Release v${{ needs.check-release.outputs.next_version }}"
-          git push origin main --tags
-          git push origin main
+          # Use authenticated GitHub CLI to push
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/spiralhouse/aureacore.git main --tags
+          git push https://${{ secrets.GITHUB_TOKEN }}@github.com/spiralhouse/aureacore.git main
             
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
