@@ -84,6 +84,25 @@ impl ConfigStore {
 
         Ok(configs)
     }
+
+    /// Removes a configuration file
+    pub fn remove_config(&self, path: impl AsRef<Path>) -> Result<()> {
+        let path = self.config_dir.join(path);
+        if !path.exists() {
+            return Err(AureaCoreError::Config(format!(
+                "Configuration file not found: {}",
+                path.display()
+            )));
+        }
+
+        fs::remove_file(&path).map_err(|e| {
+            AureaCoreError::Config(format!(
+                "Failed to remove configuration file {}: {}",
+                path.display(),
+                e
+            ))
+        })
+    }
 }
 
 #[cfg(test)]

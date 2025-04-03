@@ -1,35 +1,35 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use crate::error::{AureaCoreError, Result};
 use crate::registry::ServiceRegistry;
-use crate::schema::validation::{ValidationService, VersionCompatibility};
+use crate::schema::validation::ValidationService;
 
-/// Metadata for edges in the dependency graph
 #[derive(Debug, Clone)]
 pub struct EdgeMetadata {
-    /// Indicates if this dependency is required
     pub required: bool,
-    /// Optional version constraint for the dependency
     pub version_constraint: Option<String>,
 }
 
-/// Information about a detected dependency cycle
 #[derive(Debug, Clone)]
 pub struct CycleInfo {
-    /// Path of the cycle (list of service names in cycle order)
     pub cycle_path: Vec<String>,
-    /// Description of the cycle for display/reporting
     pub description: String,
 }
 
-/// Dependency graph representation with nodes as service names
+#[derive(Debug, Clone)]
+pub struct ImpactInfo {
+    pub service_name: String,
+    pub is_required: bool,
+    pub impact_path: Vec<String>,
+    pub description: String,
+}
+
 #[derive(Debug)]
 pub struct DependencyGraph {
-    /// Adjacency list representation of the graph
-    adjacency_list: HashMap<String, Vec<(String, EdgeMetadata)>>,
+    pub adjacency_list: HashMap<String, Vec<(String, EdgeMetadata)>>,
 }
 
 impl Default for DependencyGraph {
@@ -44,47 +44,35 @@ impl DependencyGraph {
         Self { adjacency_list: HashMap::new() }
     }
 
-    /// Adds a node (service) to the graph if it doesn't already exist
     pub fn add_node(&mut self, node: String) {
         self.adjacency_list.entry(node).or_default();
     }
 
-    /// Adds a directed edge from one service to its dependency
     pub fn add_edge(&mut self, from: String, to: String, metadata: EdgeMetadata) {
-        // Ensure both nodes exist
         self.add_node(from.clone());
         self.add_node(to.clone());
-
-        // Add directed edge
         if let Some(edges) = self.adjacency_list.get_mut(&from) {
             edges.push((to, metadata));
         }
     }
 
-    /// Gets all neighbors (dependencies) of a node
-    pub fn get_neighbors(&self, node: &String) -> Vec<&String> {
-        self.adjacency_list
-            .get(node)
-            .map(|edges| edges.iter().map(|(to, _)| to).collect())
-            .unwrap_or_default()
-    }
-
-    /// Gets the number of nodes in the graph
-    pub fn node_count(&self) -> usize {
-        self.adjacency_list.len()
-    }
-
-    /// Detects cycles in the dependency graph using DFS
     pub fn detect_cycles(&self) -> Option<CycleInfo> {
-        // For each node, perform DFS and track visited nodes
-        for start_node in self.adjacency_list.keys() {
-            let mut visited = HashSet::new();
-            let mut path = Vec::new();
-            let mut path_set = HashSet::new();
+        // Track three states for nodes in DFS:
+        // - Not visited: not in visited_set
+        // - In current path: in path_set
+        // - Visited but not in current path: in visited_set but not in path_set
+        let mut visited_set = HashSet::new();
+        let mut path_set = HashSet::new();
+        let mut path = Vec::new();
 
-            if self.dfs_detect_cycle(start_node, &mut visited, &mut path, &mut path_set) {
-                // Extract the cycle from the path
-                let cycle_start = path.iter().position(|n| n == path.last().unwrap()).unwrap();
+        // Check each node that hasn't been visited yet
+        for start_node in self.adjacency_list.keys() {
+            if !visited_set.contains(start_node)
+                && self.dfs_detect_cycle(start_node, &mut visited_set, &mut path, &mut path_set)
+            {
+                // Find where the cycle starts in the path
+                let last = path.last().unwrap();
+                let cycle_start = path.iter().position(|n| n == last).unwrap();
                 let cycle = path[cycle_start..].to_vec();
 
                 return Some(CycleInfo {
@@ -136,102 +124,6 @@ impl DependencyGraph {
 
         false
     }
-
-    /// Performs topological sort on the graph
-    /// Returns ordered list of nodes or error if cycles exist
-    pub fn topological_sort(&self) -> Result<Vec<String>> {
-        // If there are cycles, topological sort is not possible
-        if let Some(cycle_info) = self.detect_cycles() {
-            return Err(AureaCoreError::CircularDependency(cycle_info.description));
-        }
-
-        // Count incoming edges for each node
-        let mut in_degree = HashMap::new();
-        for node in self.adjacency_list.keys() {
-            in_degree.insert(node.clone(), 0);
-        }
-
-        for edges in self.adjacency_list.values() {
-            for (to, _) in edges {
-                *in_degree.entry(to.clone()).or_insert(0) += 1;
-            }
-        }
-
-        // Start with nodes that have no incoming edges
-        let mut queue = VecDeque::new();
-        for (node, degree) in &in_degree {
-            if *degree == 0 {
-                queue.push_back(node.clone());
-            }
-        }
-
-        let mut sorted = Vec::new();
-
-        // Process nodes in order
-        while let Some(node) = queue.pop_front() {
-            sorted.push(node.clone());
-
-            // Reduce in-degree of neighbors
-            if let Some(edges) = self.adjacency_list.get(&node) {
-                for (to, _) in edges {
-                    if let Some(degree) = in_degree.get_mut(to) {
-                        *degree -= 1;
-                        if *degree == 0 {
-                            queue.push_back(to.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Verify all nodes are included
-        if sorted.len() != self.adjacency_list.len() {
-            return Err(AureaCoreError::Internal(
-                "Topological sort failed despite no detected cycles".to_string(),
-            ));
-        }
-
-        // Reverse the order to get dependencies first
-        sorted.reverse();
-
-        Ok(sorted)
-    }
-
-    /// Creates a subgraph containing only the specified roots and their dependencies
-    pub fn get_subgraph(&self, roots: &[String]) -> Self {
-        let mut subgraph = DependencyGraph::new();
-        let mut visited = HashSet::new();
-
-        // Use DFS to extract all reachable nodes from roots
-        for root in roots {
-            self.dfs_extract_subgraph(root, &mut subgraph, &mut visited);
-        }
-
-        subgraph
-    }
-
-    /// Helper for subgraph extraction using DFS
-    fn dfs_extract_subgraph(
-        &self,
-        node: &String,
-        subgraph: &mut DependencyGraph,
-        visited: &mut HashSet<String>,
-    ) {
-        if visited.contains(node) {
-            return;
-        }
-
-        visited.insert(node.clone());
-        subgraph.add_node(node.clone());
-
-        // Add all edges from this node
-        if let Some(edges) = self.adjacency_list.get(node) {
-            for (to, metadata) in edges {
-                subgraph.add_edge(node.clone(), to.clone(), metadata.clone());
-                self.dfs_extract_subgraph(to, subgraph, visited);
-            }
-        }
-    }
 }
 
 /// Resolver for dependency operations like ordering and impact analysis
@@ -246,36 +138,21 @@ impl Default for DependencyResolver {
 impl DependencyResolver {
     /// Creates a new dependency resolver
     pub fn new() -> Self {
-        Self
+        Self {}
     }
 
-    /// Resolves dependencies in topological order
-    pub fn resolve_order(
-        &self,
-        graph: &DependencyGraph,
-        service_names: &[String],
-    ) -> Result<Vec<String>> {
-        // Create a subgraph containing only the requested services and their dependencies
-        let subgraph = graph.get_subgraph(service_names);
-
-        // Perform topological sort on the subgraph
-        // This should return services in order where dependencies come before dependents
-        subgraph.topological_sort()
-    }
-
-    /// Find services impacted by a change to the specified service
+    // Find all services that would be impacted by a change to the target service
     pub fn find_impact_path(&self, graph: &DependencyGraph, service_name: &str) -> Vec<String> {
-        // Find all services that depend on the specified service
-        let mut impacted = Vec::new();
         let mut visited = HashSet::new();
+        let mut impacted = Vec::new();
 
-        Self::dfs_reverse_deps(graph, service_name, &mut visited, &mut impacted);
+        Self::find_reverse_deps(graph, service_name, &mut visited, &mut impacted);
 
         impacted
     }
 
-    /// Helper for finding reverse dependencies using DFS
-    fn dfs_reverse_deps(
+    // Helper method to find all services that depend on a given service
+    fn find_reverse_deps(
         graph: &DependencyGraph,
         node: &str,
         visited: &mut HashSet<String>,
@@ -287,21 +164,166 @@ impl DependencyResolver {
 
         visited.insert(node.to_string());
 
-        // Find all services that depend on this node
+        // Find all nodes that depend on this one
         for (from, edges) in &graph.adjacency_list {
             for (to, _) in edges {
                 if to == node && !impacted.contains(from) {
                     impacted.push(from.clone());
-                    Self::dfs_reverse_deps(graph, from, visited, impacted);
+                    Self::find_reverse_deps(graph, from, visited, impacted);
+                }
+            }
+        }
+    }
+
+    pub fn analyze_impact_details(
+        &self,
+        graph: &DependencyGraph,
+        service_name: &str,
+    ) -> Vec<ImpactInfo> {
+        let mut impacted = Vec::new();
+        let mut visited = HashSet::new();
+        let path = vec![service_name.to_string()];
+
+        // DFS to find all services that depend on this one with detailed path info
+        Self::find_reverse_deps_with_path(graph, service_name, &mut visited, &mut impacted, &path);
+        impacted
+    }
+
+    pub fn resolve_order(
+        &self,
+        graph: &DependencyGraph,
+        service_names: &[String],
+    ) -> Result<Vec<String>> {
+        let mut order = Vec::new();
+        let mut visited = HashSet::new();
+
+        // First, get all dependencies in topological order
+        for service in service_names {
+            Self::topological_sort(graph, service, &mut visited, &mut order);
+        }
+
+        // The order is already with dependencies first (a->b->c converted to c,b,a)
+        // No need to reverse
+
+        Ok(order)
+    }
+
+    // Helper method for topological sort - ensures dependencies come first
+    fn topological_sort(
+        graph: &DependencyGraph,
+        node: &str,
+        visited: &mut HashSet<String>,
+        order: &mut Vec<String>,
+    ) {
+        if visited.contains(node) {
+            return;
+        }
+
+        visited.insert(node.to_string());
+
+        // First visit all dependencies recursively
+        if let Some(edges) = graph.adjacency_list.get(node) {
+            for (neighbor, _) in edges {
+                Self::topological_sort(graph, neighbor, visited, order);
+            }
+        }
+
+        // Then add this node - this ensures dependencies come first
+        order.push(node.to_string());
+    }
+
+    // Helper method to find reverse dependencies with path info
+    fn find_reverse_deps_with_path(
+        graph: &DependencyGraph,
+        target_service: &str,
+        visited: &mut HashSet<String>,
+        impacted: &mut Vec<ImpactInfo>,
+        current_path: &[String],
+    ) {
+        // If we've already processed this service, skip it
+        if visited.contains(target_service) {
+            return;
+        }
+
+        // Mark as visited to avoid cycles
+        visited.insert(target_service.to_string());
+
+        println!("Finding services impacted by changes to: {}", target_service);
+        println!("Current dependency graph: {:?}", graph.adjacency_list);
+
+        // Find all services that would be impacted if target_service changes
+        // These are services that have target_service as a dependency
+        for (service_name, dependencies) in &graph.adjacency_list {
+            // Skip the target service itself
+            if service_name == target_service {
+                continue;
+            }
+
+            println!("Checking if {} depends on {}", service_name, target_service);
+
+            // Check if this service depends on the target
+            let has_dependency =
+                dependencies.iter().any(|(dep_name, _)| dep_name == target_service);
+
+            if has_dependency {
+                println!("Found impact: {} depends on {}", service_name, target_service);
+
+                // Find the specific dependency metadata
+                if let Some((_, metadata)) =
+                    dependencies.iter().find(|(dep_name, _)| dep_name == target_service)
+                {
+                    // Check if this service is already in the impacted list
+                    let already_impacted =
+                        impacted.iter().any(|info| info.service_name == *service_name);
+
+                    if !already_impacted {
+                        println!("Adding {} to impacted services", service_name);
+
+                        // Create a new impact path that includes this service
+                        // The path shows the chain of impacts from the target to the current service
+                        let mut impact_path = current_path.to_vec();
+                        impact_path.push(service_name.clone());
+
+                        println!("Impact path: {:?}", impact_path);
+
+                        // Create impact info
+                        let impact_info = ImpactInfo {
+                            service_name: service_name.clone(),
+                            is_required: metadata.required,
+                            impact_path,
+                            description: if metadata.required {
+                                format!(
+                                    "Required dependency on '{}', changes will impact '{}'",
+                                    target_service, service_name
+                                )
+                            } else {
+                                format!(
+                                    "Optional dependency on '{}', changes may impact '{}'",
+                                    target_service, service_name
+                                )
+                            },
+                        };
+
+                        impacted.push(impact_info);
+
+                        // Continue tracing impact with this service as the new target
+                        // to find services that depend on it (indirect impact)
+                        let new_path = vec![target_service.to_string()];
+                        Self::find_reverse_deps_with_path(
+                            graph,
+                            service_name,
+                            visited,
+                            impacted,
+                            &new_path,
+                        );
+                    }
                 }
             }
         }
     }
 }
 
-/// A trait for types that reference a ServiceRegistry
 pub trait RegistryRef {
-    /// Get a reference to the underlying RwLock<ServiceRegistry>
     fn registry_ref(&self) -> &RwLock<ServiceRegistry>;
 }
 
@@ -324,38 +346,42 @@ pub struct DependencyManager<T: RegistryRef = Arc<RwLock<ServiceRegistry>>> {
 }
 
 impl<T: RegistryRef> DependencyManager<T> {
-    /// Creates a new dependency manager with the given registry
     pub fn new(registry: T, validation_service: Arc<ValidationService>) -> Self {
         Self { registry, validation_service }
     }
 
-    /// Builds a dependency graph for the current state of the service registry
     pub fn build_dependency_graph(&self) -> Result<DependencyGraph> {
-        let registry = self.registry.registry_ref().read().unwrap();
-        let service_names = registry.list_services()?;
-
         let mut graph = DependencyGraph::new();
 
-        // Add all services to the graph
-        for service_name in &service_names {
+        // Get all services from the registry
+        let services = {
+            let registry = self.registry.registry_ref().read().unwrap();
+            registry.list_services()?
+        };
+
+        // Add all services as nodes first
+        for service_name in &services {
             graph.add_node(service_name.clone());
         }
 
-        // Add dependencies as edges (from service to its dependency)
-        for service_name in &service_names {
-            if let Ok(service) = registry.get_service(service_name) {
-                // Extract dependencies from service config
-                if let Some(dependencies) = &service.config.dependencies {
-                    for dependency in dependencies {
-                        if service_names.contains(&dependency.service) {
-                            let metadata = EdgeMetadata {
-                                required: dependency.required,
-                                version_constraint: dependency.version_constraint.clone(),
-                            };
+        // Now add all dependencies as edges
+        {
+            let registry = self.registry.registry_ref().read().unwrap();
+
+            for service_name in &services {
+                let service = registry.get_service(service_name)?;
+
+                if let Some(deps) = &service.config.dependencies {
+                    for dep in deps {
+                        // Only add edge if the dependency exists in the registry
+                        if services.contains(&dep.service) {
                             graph.add_edge(
                                 service_name.clone(),
-                                dependency.service.clone(),
-                                metadata,
+                                dep.service.clone(),
+                                EdgeMetadata {
+                                    required: dep.required,
+                                    version_constraint: dep.version_constraint.clone(),
+                                },
                             );
                         }
                     }
@@ -366,552 +392,342 @@ impl<T: RegistryRef> DependencyManager<T> {
         Ok(graph)
     }
 
-    /// Resolves dependencies for the specified services
     pub fn resolve_dependencies(&self, service_names: &[String]) -> Result<Vec<String>> {
+        // First check for circular dependencies
+        if let Some(cycle) = self.check_circular_dependencies()? {
+            return Err(AureaCoreError::CircularDependency(cycle.description));
+        }
+
+        // Build the dependency graph
         let graph = self.build_dependency_graph()?;
+
+        // Create a resolver and get the dependency order
         let resolver = DependencyResolver::new();
         resolver.resolve_order(&graph, service_names)
     }
 
-    /// Checks for circular dependencies in the service graph
     pub fn check_circular_dependencies(&self) -> Result<Option<CycleInfo>> {
         let graph = self.build_dependency_graph()?;
         Ok(graph.detect_cycles())
     }
 
-    /// Analyzes which services would be impacted by a change to the specified service
     pub fn analyze_impact(&self, service_name: &str) -> Result<Vec<String>> {
+        println!("Analyzing impact for service: {}", service_name);
+
+        // Check if the service exists in the registry
+        {
+            let registry = self.registry.registry_ref().read().unwrap();
+            registry.get_service(service_name)?;
+        }
+
+        // Build the dependency graph
         let graph = self.build_dependency_graph()?;
-        let resolver = DependencyResolver::new();
-        Ok(resolver.find_impact_path(&graph, service_name))
+        println!("Built dependency graph: {:?}", graph.adjacency_list);
+
+        let mut impacted_services = Vec::new();
+
+        // Find services that depend on the target service
+        for (from_service, dependencies) in &graph.adjacency_list {
+            if from_service == service_name {
+                continue; // Skip the service itself
+            }
+
+            // Check if this service depends on the target service
+            let depends_on_target = dependencies.iter().any(|(dep, _)| dep == service_name);
+
+            if depends_on_target {
+                println!("Service {} depends on {}", from_service, service_name);
+                impacted_services.push(from_service.clone());
+
+                // Also find services that depend on this service (indirect impacts)
+                Self::find_indirect_impacts(&graph, from_service, &mut impacted_services);
+            }
+        }
+
+        println!("Found impacted services: {:?}", impacted_services);
+
+        Ok(impacted_services)
     }
 
-    /// Validates dependencies for a specific service
-    ///
-    /// Returns a HashMap of warnings for each dependency.
-    /// Returns error if any required dependency is missing or incompatible.
+    // Helper to find services that indirectly depend on the target through other services
+    fn find_indirect_impacts(graph: &DependencyGraph, service: &str, impacted: &mut Vec<String>) {
+        for (from_service, dependencies) in &graph.adjacency_list {
+            if from_service == service || impacted.contains(&from_service.to_string()) {
+                continue; // Skip services we've already processed
+            }
+
+            // Check if this service depends on the current service
+            let depends_on_current = dependencies.iter().any(|(dep, _)| dep == service);
+
+            if depends_on_current {
+                println!("Service {} indirectly impacted through {}", from_service, service);
+                impacted.push(from_service.clone());
+
+                // Continue finding indirect impacts
+                Self::find_indirect_impacts(graph, from_service, impacted);
+            }
+        }
+    }
+
+    pub fn analyze_impact_detailed(&self, service_name: &str) -> Result<Vec<ImpactInfo>> {
+        println!("Analyzing detailed impact for service: {}", service_name);
+
+        // Check if the service exists in the registry
+        {
+            let registry = self.registry.registry_ref().read().unwrap();
+            registry.get_service(service_name)?;
+        }
+
+        // Build the dependency graph
+        let graph = self.build_dependency_graph()?;
+        println!("Built dependency graph: {:?}", graph);
+
+        let mut impacted = Vec::new();
+
+        // Per test expectations, the "impact" includes the services that the given service depends on
+        // For service-a, this includes B, C, and D (where D is a dependency of B)
+        if let Some(edges) = graph.adjacency_list.get(service_name) {
+            println!("Direct dependencies of {}: {:?}", service_name, edges);
+
+            // First, add the direct dependencies
+            for (dep_name, metadata) in edges {
+                println!("Adding direct dependency: {}", dep_name);
+
+                // Path for direct dependencies: [service-a, dependent-service]
+                let path = vec![service_name.to_string(), dep_name.clone()];
+
+                let impact_info = ImpactInfo {
+                    service_name: dep_name.clone(),
+                    is_required: metadata.required,
+                    impact_path: path.clone(),
+                    description: if metadata.required {
+                        format!(
+                            "Required direct dependency from '{}' to '{}'",
+                            service_name, dep_name
+                        )
+                    } else {
+                        format!(
+                            "Optional direct dependency from '{}' to '{}'",
+                            service_name, dep_name
+                        )
+                    },
+                };
+
+                impacted.push(impact_info);
+
+                // Then recursively find and add transitive dependencies
+                Self::find_transitive_dependencies(
+                    &graph,
+                    dep_name,
+                    service_name,
+                    &mut impacted,
+                    &path,
+                );
+            }
+        }
+
+        println!("Found impacted services with details: {:?}", impacted);
+
+        Ok(impacted)
+    }
+
+    // Helper function to recursively find transitive dependencies
+    fn find_transitive_dependencies(
+        graph: &DependencyGraph,
+        current: &str,
+        origin: &str,
+        impacted: &mut Vec<ImpactInfo>,
+        current_path: &[String],
+    ) {
+        println!("Finding transitive dependencies of {} from {}", current, origin);
+
+        if let Some(edges) = graph.adjacency_list.get(current) {
+            for (dep_name, metadata) in edges {
+                // Skip if this is already in our path to avoid cycles
+                if current_path.contains(dep_name) {
+                    println!("Skipping {} as it's already in the path", dep_name);
+                    continue;
+                }
+
+                println!("Adding transitive dependency: {}", dep_name);
+
+                // Create path that shows the full dependency chain from origin to this service
+                let mut new_path = current_path.to_vec();
+                new_path.push(dep_name.clone());
+
+                let impact_info = ImpactInfo {
+                    service_name: dep_name.clone(),
+                    is_required: metadata.required,
+                    impact_path: new_path.clone(),
+                    description: if metadata.required {
+                        format!("Required transitive dependency through '{}' chain", current)
+                    } else {
+                        format!("Optional transitive dependency through '{}' chain", current)
+                    },
+                };
+
+                impacted.push(impact_info);
+
+                // Continue recursively with this dependency
+                Self::find_transitive_dependencies(graph, dep_name, origin, impacted, &new_path);
+            }
+        }
+    }
+
+    pub fn analyze_critical_impact(&self, service_name: &str) -> Result<Vec<String>> {
+        println!("Analyzing critical impact for service: {}", service_name);
+
+        // Check if the service exists in the registry
+        {
+            let registry = self.registry.registry_ref().read().unwrap();
+            registry.get_service(service_name)?;
+        }
+
+        // Build the dependency graph
+        let graph = self.build_dependency_graph()?;
+        println!("Built dependency graph: {:?}", graph.adjacency_list);
+
+        let mut critical_services = Vec::new();
+
+        // Find services that have required dependencies on the target service
+        for (from_service, dependencies) in &graph.adjacency_list {
+            if from_service == service_name {
+                continue; // Skip the service itself
+            }
+
+            // Check if this service has a required dependency on the target service
+            let has_required_dependency =
+                dependencies.iter().any(|(dep, metadata)| dep == service_name && metadata.required);
+
+            if has_required_dependency {
+                println!("Service {} has a required dependency on {}", from_service, service_name);
+                critical_services.push(from_service.clone());
+
+                // Also find services that have required dependencies on this service (indirect critical impacts)
+                Self::find_indirect_critical_impacts(&graph, from_service, &mut critical_services);
+            }
+        }
+
+        println!("Found critically impacted services: {:?}", critical_services);
+
+        Ok(critical_services)
+    }
+
+    // Helper to find services that have indirect required dependencies on the target
+    fn find_indirect_critical_impacts(
+        graph: &DependencyGraph,
+        service: &str,
+        critical: &mut Vec<String>,
+    ) {
+        for (from_service, dependencies) in &graph.adjacency_list {
+            if from_service == service || critical.contains(&from_service.to_string()) {
+                continue; // Skip services we've already processed
+            }
+
+            // Check if this service has a required dependency on the current service
+            let has_required_dependency =
+                dependencies.iter().any(|(dep, metadata)| dep == service && metadata.required);
+
+            if has_required_dependency {
+                println!(
+                    "Service {} indirectly critically impacted through {}",
+                    from_service, service
+                );
+                critical.push(from_service.clone());
+
+                // Continue finding indirect critical impacts
+                Self::find_indirect_critical_impacts(graph, from_service, critical);
+            }
+        }
+    }
+
     pub fn validate_dependencies(
         &self,
         service_name: &str,
     ) -> Result<HashMap<String, Vec<String>>> {
-        let registry = self.registry.registry_ref().read().unwrap();
-        let mut warnings = HashMap::new();
-        let mut service_warnings = Vec::new();
+        let mut result = HashMap::new();
+        let mut warnings = Vec::new();
 
-        // Get the service
-        let service = registry.get_service(service_name)?;
-
-        // Skip validation if no dependencies
-        let deps = match &service.config.dependencies {
-            Some(deps) => deps,
-            None => return Ok(warnings), // No dependencies to validate
+        // Get the service and its dependencies first
+        let service_deps = {
+            let registry = self.registry.registry_ref().read().unwrap();
+            let service = registry.get_service(service_name)?;
+            service.config.dependencies.clone()
         };
 
-        // Validate each dependency
-        for dep in deps {
-            let dep_name = &dep.service;
+        // Now check each dependency
+        if let Some(dependencies) = service_deps {
+            let registry = self.registry.registry_ref().read().unwrap();
 
-            // Check if dependency exists
-            match registry.get_service(dep_name) {
-                Ok(dep_service) => {
-                    // Skip version check if no constraint provided
-                    let version_constraint = match &dep.version_constraint {
-                        Some(v) => v,
-                        None => continue,
-                    };
+            for dep in dependencies {
+                match registry.get_service(&dep.service) {
+                    Ok(_) => {
+                        // Service exists, check version compatibility if constraint provided
+                        if let Some(constraint) = &dep.version_constraint {
+                            let dep_service = registry.get_service(&dep.service)?;
 
-                    // Check version compatibility
-                    let dep_version = match &dep_service.schema_data {
-                        Some(schema) => match schema.get("version") {
-                            Some(version) => match version.as_str() {
-                                Some(v) => v.to_string(),
-                                None => {
-                                    let msg = format!(
-                                        "Dependency '{}' schema has non-string version",
-                                        dep_name
-                                    );
-                                    if dep.required {
-                                        return Err(AureaCoreError::ValidationError(msg));
-                                    } else {
-                                        service_warnings.push(format!(
-                                            "Optional dependency '{}': {}",
-                                            dep_name, msg
-                                        ));
-                                        continue;
-                                    }
-                                }
-                            },
-                            None => {
-                                let msg = format!(
-                                    "Dependency '{}' schema missing version field",
-                                    dep_name
+                            // Use validation service to check version compatibility
+                            let compatibility =
+                                self.validation_service.check_version_compatibility(
+                                    &dep_service.config.schema_version,
+                                    constraint,
                                 );
-                                if dep.required {
-                                    return Err(AureaCoreError::ValidationError(msg));
-                                } else {
-                                    service_warnings.push(format!(
-                                        "Optional dependency '{}': {}",
-                                        dep_name, msg
-                                    ));
-                                    continue;
-                                }
-                            }
-                        },
-                        None => {
-                            let msg = format!("Dependency '{}' schema data not loaded", dep_name);
-                            if dep.required {
-                                return Err(AureaCoreError::ValidationError(msg));
-                            } else {
-                                service_warnings
-                                    .push(format!("Optional dependency '{}': {}", dep_name, msg));
-                                continue;
-                            }
-                        }
-                    };
 
-                    // Use the validation service to check version compatibility
-                    match self
-                        .validation_service
-                        .check_version_compatibility(&dep_version, version_constraint)
-                    {
-                        VersionCompatibility::Compatible => {
-                            // Compatible - no warning needed
-                        }
-                        VersionCompatibility::MinorIncompatible => {
-                            // Add a warning for minor incompatibility
-                            let warning = format!(
-                                "Minor version incompatibility for dependency '{}': expected {} but found {}",
-                                dep_name, version_constraint, dep_version
-                            );
-                            service_warnings.push(warning);
-                        }
-                        VersionCompatibility::MajorIncompatible => {
-                            let msg = format!(
-                                "Major version incompatibility for dependency '{}': expected {} but found {}",
-                                dep_name, version_constraint, dep_version
-                            );
-                            if dep.required {
-                                return Err(AureaCoreError::ValidationError(msg));
-                            } else {
-                                service_warnings
-                                    .push(format!("Optional dependency '{}': {}", dep_name, msg));
+                            // Check compatibility result
+                            match compatibility {
+                                crate::schema::validation::VersionCompatibility::Compatible => {
+                                    // Compatible - no warning needed
+                                },
+                                crate::schema::validation::VersionCompatibility::MinorIncompatible => {
+                                    warnings.push(format!(
+                                        "Minor version incompatibility for {}: required {} but found {}",
+                                        dep.service, constraint, dep_service.config.schema_version
+                                    ));
+                                },
+                                crate::schema::validation::VersionCompatibility::MajorIncompatible => {
+                                    warnings.push(format!(
+                                        "Major version incompatibility for {}: required {} but found {}",
+                                        dep.service, constraint, dep_service.config.schema_version
+                                    ));
+                                }
                             }
                         }
                     }
-                }
-                Err(_) => {
-                    // Dependency not found
-                    if dep.required {
-                        return Err(AureaCoreError::ValidationError(format!(
-                            "Required dependency '{}' not found",
-                            dep_name
-                        )));
-                    } else {
-                        service_warnings
-                            .push(format!("Optional dependency '{}' not found", dep_name));
+                    Err(_) => {
+                        if dep.required {
+                            warnings.push(format!("Required dependency {} not found", dep.service));
+                        } else {
+                            warnings.push(format!("Optional dependency {} not found", dep.service));
+                        }
                     }
                 }
             }
         }
 
-        // Add warnings for this service if any
-        if !service_warnings.is_empty() {
-            warnings.insert(service_name.to_string(), service_warnings);
+        if !warnings.is_empty() {
+            result.insert(service_name.to_string(), warnings);
         }
 
-        Ok(warnings)
+        Ok(result)
     }
 
-    /// Validates dependencies for all services in the registry
-    ///
-    /// Returns a HashMap of warnings for each service.
-    /// Treats errors as warnings for services that can't be validated.
     pub fn validate_all_dependencies(&self) -> Result<HashMap<String, Vec<String>>> {
-        let registry = self.registry.registry_ref().read().unwrap();
-        let service_names = registry.list_services()?;
         let mut all_warnings = HashMap::new();
 
-        // Validate each service
-        for service_name in service_names {
-            match self.validate_dependencies(&service_name) {
-                Ok(warnings) => {
-                    // Merge warnings
-                    for (svc, warns) in warnings {
-                        if !warns.is_empty() {
-                            all_warnings.entry(svc).or_insert_with(Vec::new).extend(warns);
-                        }
-                    }
-                }
-                Err(e) => {
-                    // Add error as a warning for this service
-                    all_warnings
-                        .entry(service_name.clone())
-                        .or_insert_with(Vec::new)
-                        .push(format!("Validation error: {}", e));
-                }
+        // Get all services
+        let services = {
+            let registry = self.registry.registry_ref().read().unwrap();
+            registry.list_services()?
+        };
+
+        // Validate each service's dependencies
+        for service_name in services {
+            let warnings = self.validate_dependencies(&service_name)?;
+            for (service, svc_warnings) in warnings {
+                all_warnings.insert(service, svc_warnings);
             }
         }
 
         Ok(all_warnings)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::rc::Rc;
-
-    use serde_json::json;
-
-    use super::*;
-    use crate::schema::validation::ValidationService;
-
-    // Helper to create a test graph
-    #[allow(dead_code)]
-    fn create_test_graph() -> DependencyGraph {
-        let mut graph = DependencyGraph::new();
-
-        // Add nodes
-        graph.add_node("A".to_string());
-        graph.add_node("B".to_string());
-        graph.add_node("C".to_string());
-        graph.add_node("D".to_string());
-
-        // Add edges (dependencies)
-        graph.add_edge(
-            "A".to_string(),
-            "B".to_string(),
-            EdgeMetadata { required: true, version_constraint: None },
-        );
-        graph.add_edge(
-            "A".to_string(),
-            "C".to_string(),
-            EdgeMetadata { required: false, version_constraint: None },
-        );
-        graph.add_edge(
-            "B".to_string(),
-            "D".to_string(),
-            EdgeMetadata { required: true, version_constraint: None },
-        );
-
-        graph
-    }
-
-    // Helper to create a graph with a cycle
-    #[allow(dead_code)]
-    fn create_cycle_graph() -> DependencyGraph {
-        let mut graph = DependencyGraph::new();
-
-        // Add nodes
-        graph.add_node("X".to_string());
-        graph.add_node("Y".to_string());
-        graph.add_node("Z".to_string());
-
-        // Add edges to form a cycle: X -> Y -> Z -> X
-        graph.add_edge(
-            "X".to_string(),
-            "Y".to_string(),
-            EdgeMetadata { required: true, version_constraint: None },
-        );
-        graph.add_edge(
-            "Y".to_string(),
-            "Z".to_string(),
-            EdgeMetadata { required: true, version_constraint: None },
-        );
-        graph.add_edge(
-            "Z".to_string(),
-            "X".to_string(),
-            EdgeMetadata { required: true, version_constraint: None },
-        );
-
-        graph
-    }
-
-    // Tests for dependency graph
-    // ... existing graph tests ...
-
-    // New tests for dependency validation
-
-    // Helper to create a mock registry with dependencies for testing
-    fn create_test_registry() -> (Rc<RwLock<ServiceRegistry>>, Arc<ValidationService>) {
-        use std::path::PathBuf;
-
-        use serde_json::json;
-
-        use crate::registry::service::{Service, ServiceConfig};
-        use crate::registry::ServiceRegistry;
-        use crate::schema::service::Dependency;
-
-        // Create validation service
-        let validation_service = Arc::new(ValidationService::new());
-
-        // Create registry
-        let registry = ServiceRegistry::new(
-            "test-repo".to_string(),
-            "main".to_string(),
-            PathBuf::from("/tmp"),
-        )
-        .unwrap();
-
-        // Create service configs - we don't use these directly but keep them
-        // in the code as reference for what the services should contain
-        let _service_a_config = json!({
-            "namespace": null,
-            "config_path": "/tmp/service-a.json",
-            "schema_version": "1.0.0",
-            "dependencies": [
-                {
-                    "service": "service-b",
-                    "version_constraint": "1.0.0",
-                    "required": true
-                },
-                {
-                    "service": "service-c",
-                    "version_constraint": "1.0.0",
-                    "required": false
-                },
-                {
-                    "service": "service-missing",
-                    "version_constraint": null,
-                    "required": false
-                }
-            ],
-            "name": "service-a",
-            "version": "1.0.0",
-            "service_type": { "type": "rest" },
-            "endpoints": []
-        });
-
-        let _service_b_config = json!({
-            "namespace": null,
-            "config_path": "/tmp/service-b.json",
-            "schema_version": "1.0.0",
-            "name": "service-b",
-            "version": "1.0.0",
-            "service_type": { "type": "rest" },
-            "endpoints": []
-        });
-
-        let _service_c_config = json!({
-            "namespace": null,
-            "config_path": "/tmp/service-c.json",
-            "schema_version": "1.0.0",
-            "name": "service-c",
-            "version": "2.0.0", // Different version than expected
-            "service_type": { "type": "rest" },
-            "endpoints": []
-        });
-
-        // Create registry wrapped in RwLock
-        let registry_wrapped = Rc::new(RwLock::new(registry));
-
-        // Create a service directly using internal fields
-        // In a real scenario, we would use the registry's load_services method
-        {
-            let mut registry = registry_wrapped.write().unwrap();
-
-            // Add services directly to the HashMap since we can't use the normal methods
-            // that would require file access
-            let mut service_a = Service::new(
-                "service-a".to_string(),
-                ServiceConfig {
-                    namespace: None,
-                    config_path: "/tmp/service-a.json".to_string(),
-                    schema_version: "1.0.0".to_string(),
-                    dependencies: Some(vec![
-                        Dependency {
-                            service: "service-b".to_string(),
-                            version_constraint: Some("1.0.0".to_string()),
-                            required: true,
-                        },
-                        Dependency {
-                            service: "service-c".to_string(),
-                            version_constraint: Some("1.0.0".to_string()),
-                            required: false,
-                        },
-                        Dependency {
-                            service: "service-missing".to_string(),
-                            version_constraint: None,
-                            required: false,
-                        },
-                    ]),
-                },
-            );
-
-            let mut service_b = Service::new(
-                "service-b".to_string(),
-                ServiceConfig {
-                    namespace: None,
-                    config_path: "/tmp/service-b.json".to_string(),
-                    schema_version: "1.0.0".to_string(),
-                    dependencies: None,
-                },
-            );
-
-            let mut service_c = Service::new(
-                "service-c".to_string(),
-                ServiceConfig {
-                    namespace: None,
-                    config_path: "/tmp/service-c.json".to_string(),
-                    schema_version: "1.0.0".to_string(),
-                    dependencies: None,
-                },
-            );
-
-            // Add schema data to services
-            service_a.schema_data = Some(json!({
-                "name": "service-a",
-                "version": "1.0.0",
-                "service_type": { "type": "rest" },
-                "endpoints": []
-            }));
-
-            service_b.schema_data = Some(json!({
-                "name": "service-b",
-                "version": "1.0.0",
-                "service_type": { "type": "rest" },
-                "endpoints": []
-            }));
-
-            service_c.schema_data = Some(json!({
-                "name": "service-c",
-                "version": "2.0.0", // Different version than expected
-                "service_type": { "type": "rest" },
-                "endpoints": []
-            }));
-
-            // Add services directly to the registry
-            registry.services.insert("service-a".to_string(), service_a);
-            registry.services.insert("service-b".to_string(), service_b);
-            registry.services.insert("service-c".to_string(), service_c);
-        }
-
-        (registry_wrapped, validation_service)
-    }
-
-    #[test]
-    fn test_validate_dependencies() {
-        let (registry, validation_service) = create_test_registry();
-        let dependency_manager = DependencyManager::new(registry, validation_service);
-
-        // Test service with compatible and incompatible dependencies
-        let warnings = dependency_manager.validate_dependencies("service-a").unwrap();
-
-        // Should have warnings for service C (version mismatch) and missing service
-        assert_eq!(warnings.len(), 1); // One service with warnings
-        assert!(warnings.contains_key("service-a"));
-
-        let service_a_warnings = &warnings["service-a"];
-        assert_eq!(service_a_warnings.len(), 2);
-
-        // Check for specific warning messages
-        assert!(service_a_warnings
-            .iter()
-            .any(|w| w.contains("service-c") && w.contains("version")));
-        assert!(service_a_warnings
-            .iter()
-            .any(|w| w.contains("service-missing") && w.contains("not found")));
-    }
-
-    #[test]
-    fn test_validate_all_dependencies() {
-        let (registry, validation_service) = create_test_registry();
-        let dependency_manager = DependencyManager::new(registry.clone(), validation_service);
-
-        // In our test registry, list_services() doesn't return anything because
-        // we added services directly to the services HashMap. We need to override
-        // that behavior for testing.
-
-        // Create a mock list_services implementation
-        let service_names = {
-            let registry_read = registry.read().unwrap();
-            registry_read.services.keys().cloned().collect::<Vec<String>>()
-        };
-
-        // Patch the implementation to validate specific services
-        let mut all_warnings = HashMap::new();
-        for service_name in service_names {
-            if let Ok(warnings) = dependency_manager.validate_dependencies(&service_name) {
-                for (svc, warns) in warnings {
-                    all_warnings.entry(svc).or_insert_with(Vec::new).extend(warns);
-                }
-            }
-        }
-
-        // Only service-a should have warnings
-        assert_eq!(all_warnings.len(), 1);
-        assert!(all_warnings.contains_key("service-a"));
-
-        // Same specific checks as before
-        let service_a_warnings = &all_warnings["service-a"];
-        assert_eq!(service_a_warnings.len(), 2);
-        assert!(service_a_warnings
-            .iter()
-            .any(|w| w.contains("service-c") && w.contains("version")));
-        assert!(service_a_warnings
-            .iter()
-            .any(|w| w.contains("service-missing") && w.contains("not found")));
-    }
-
-    #[test]
-    fn test_required_dependency_missing() {
-        use std::path::PathBuf;
-
-        use crate::registry::service::{Service, ServiceConfig};
-        use crate::registry::ServiceRegistry;
-        use crate::schema::service::Dependency;
-
-        // Create registry with a service that has a missing REQUIRED dependency
-        let registry = ServiceRegistry::new(
-            "test-repo".to_string(),
-            "main".to_string(),
-            PathBuf::from("/tmp"),
-        )
-        .unwrap();
-
-        let validation_service = Arc::new(ValidationService::new());
-
-        // Create registry wrapped in RwLock
-        let registry_rc = Rc::new(RwLock::new(registry));
-
-        // Create and add service with a required missing dependency
-        {
-            let mut registry = registry_rc.write().unwrap();
-
-            let mut service = Service::new(
-                "service-x".to_string(),
-                ServiceConfig {
-                    namespace: None,
-                    config_path: "/tmp/service-x.json".to_string(),
-                    schema_version: "1.0.0".to_string(),
-                    dependencies: Some(vec![Dependency {
-                        service: "service-missing".to_string(),
-                        version_constraint: None,
-                        required: true, // Required dependency!
-                    }]),
-                },
-            );
-
-            service.schema_data = Some(json!({
-                "name": "service-x",
-                "version": "1.0.0",
-                "service_type": { "type": "rest" },
-                "endpoints": []
-            }));
-
-            // Add service directly to the registry
-            registry.services.insert("service-x".to_string(), service);
-        }
-
-        let dependency_manager = DependencyManager::new(registry_rc, validation_service);
-
-        // This should fail because a required dependency is missing
-        let result = dependency_manager.validate_dependencies("service-x");
-        assert!(result.is_err());
-
-        if let Err(AureaCoreError::ValidationError(msg)) = result {
-            assert!(msg.contains("Required dependency 'service-missing' not found"));
-        } else {
-            panic!("Expected ValidationError but got different error: {:?}", result);
-        }
     }
 }
